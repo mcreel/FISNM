@@ -1,0 +1,6 @@
+
+BatchAR1.jl is working well
+* need to add a callback to testing data
+* split out dgp to a function
+* train on GPU?
+* use a multivariate example: DSGE?
