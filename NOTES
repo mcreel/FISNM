@@ -1,6 +1,4 @@
-
-BatchAR1.jl is working well
-* need to add a callback to testing data
-* split out dgp to a function
-* train on GPU?
-* use a multivariate example: DSGE?
+* split out NN training as a function which takes dgp as an arg
+* make it multivatiate (inputs and outputs)
+* use DSGE as a multivariate example (or start more simply)
+* use MA(2) model to compare to SNM paper, and to Jiang et al ref?
