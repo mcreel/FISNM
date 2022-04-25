@@ -1,2 +1,6 @@
+* add a callback between datareps loops to stop training when out 
+sample fit no longer improves
+
 * use DSGE as a multivariate example
+
 * use MA(2) model to compare to SNM paper, and to Jiang et al ref?

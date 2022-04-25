@@ -10,7 +10,7 @@ include("../FISNM.jl")
 T = 100 # observations in samples
 S = 100 # number of samples in inner training loop
 epochs = 10 # cycles through samples in inner training loop
-datareps = 10000 # number of runs through outer loop, where new samples are drawn
+datareps = 1000 # number of runs through outer loop, where new samples are drawn
 nodesperlayer = 16
 layers = 2
 
