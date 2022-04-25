@@ -1,7 +1,8 @@
 # this generates data and trains for some epochs,
 # and then loops. That way, the size of the data
 # on the gpu is reduced.
-using Flux, Statistics, Optim
+using Flux, CUDA, Statistics, Optim, PrettyTables
+using BSON: @save, @load
 include("Logitlib.jl")
 include("../FISNM.jl")
 
@@ -9,29 +10,28 @@ include("../FISNM.jl")
 T = 100 # observations in samples
 S = 100 # number of samples in inner training loop
 epochs = 10 # cycles through samples in inner training loop
-datareps = 1000 # number of runs through outer loop, where new samples are drawn
-m = trainmodel(dgp, T, S, epochs, datareps)
-Flux.reset!(m)
+datareps = 10000 # number of runs through outer loop, where new samples are drawn
+nodesperlayer = 16
+layers = 2
 
-# save the model (need to add)
+m = trainmodel(dgp, T, S, datareps, nodesperlayer, layers, epochs)
 
-# check the fit
+# NN preds
+Flux.reset!(m) # need to reset state in case batch size changes
 T = 100
-S = 1000
+S = 10000
 x, y  = dgp(T, S)
-X_rnn = batch_timeseries(x, T, T) |> gpu 
+X_rnn = batch_timeseries(x, T, T)
 pred = [m(x) for x in X_rnn][end]
+θs = Float64.(y')
+θhats = Float64.(pred')
 
-θs = y'
-θhats = pred'
-
+# ML pred
 # logit average log likelihood function
 function logitlikelihood(theta, y, x)
     p = 1.0./(1.0 .+ exp.(-x*theta))
     mean(y.*log.(p) .+ (log.(1.0 .- p)).*(1.0 .- y))
 end
-
-# ML pred
 k = size(θs,2)
 θs_ml = zeros(S,k)
 for s = 1:S
@@ -43,7 +43,14 @@ end
 
 d = [θs θhats θs_ml]
 display(cor(d))
-e = [θhats .- θs θs_ml .- θs]
-println("RMSEs: NN first, then ML")
-sqrt.(mean(abs2.(e), dims=1))
+e = θs - θhats
+nbias = mean(e, dims=1)
+nrmse = sqrt.(mean(abs2.(e), dims=1))
+e = θs - θs_ml
+mlbias = mean(e, dims=1)
+mlrmse = sqrt.(mean(abs2.(e), dims=1))
+header = ["NN bias", "ML bias", "NN rmse", "ML rmse"]
+pretty_table([nbias' mlbias' nrmse' mlrmse'], header)
+
+@save "$layers"*"_"*"$nodesperlayer"*"_"*"$datareps"*"_"*"$epochs.bson" m nrmse mlrmse
 

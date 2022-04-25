@@ -1,4 +1,2 @@
-* split out NN training as a function which takes dgp as an arg
-* make it multivatiate (inputs and outputs)
-* use DSGE as a multivariate example (or start more simply)
+* use DSGE as a multivariate example
 * use MA(2) model to compare to SNM paper, and to Jiang et al ref?
