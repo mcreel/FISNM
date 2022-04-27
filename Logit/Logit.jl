@@ -3,15 +3,15 @@
 # on the gpu is reduced.
 using Flux, CUDA, Statistics, Optim, PrettyTables
 using BSON: @save, @load
-include("Logitlib.jl")
+include("LogitLib.jl")
 include("../FISNM.jl")
 
 # train the model
 T = 100 # observations in samples
 S = 100 # number of samples in inner training loop
 epochs = 10 # cycles through samples in inner training loop
-datareps = 1000 # number of runs through outer loop, where new samples are drawn
-nodesperlayer = 16
+datareps = 10000 # number of runs through outer loop, where new samples are drawn
+nodesperlayer = 64
 layers = 2
 
 m = trainmodel(dgp, T, S, datareps, nodesperlayer, layers, epochs)

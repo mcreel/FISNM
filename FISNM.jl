@@ -1,10 +1,14 @@
 using Flux, CUDA
 
 function trainmodel(dgp, T, S, datareps, nodesperlayer, layers, epochs)
-    # the rnn. This is fairly good. Have tried GRU (similar) RNN (worse) and more layers (no help)
-    x, y = dgp(T,S)
-    k = size(x,1) # number of exogs (features)
-    g = size(y,1) # number of endogs(outputs)
+    # testing data
+    xtesting, ytesting = dgp(T,10000)
+    X_rnn_testing = batch_timeseries(xtesting, T, T)
+    X_rnn_testing |> gpu
+    ytesting |> gpu
+    k = size(xtesting,1) # number of exogs (features)
+    g = size(ytesting,1) # number of endogs(outputs)
+    # make the model
     if layers == 2
         m = Chain(
                   LSTM(k=>nodesperlayer),
@@ -13,35 +17,60 @@ function trainmodel(dgp, T, S, datareps, nodesperlayer, layers, epochs)
     elseif layers == 3
         m = Chain(
                   LSTM(k=>nodesperlayer),
-                  LSTM(nodesperlayer=>nodesperlayer),
+                  Dense(nodesperlayer=>nodesperlayer, tanh),
                   Dense(nodesperlayer=>g)
                  )
     else
         m = Chain(
                   LSTM(k=>nodesperlayer),
-                  LSTM(nodesperlayer=>nodesperlayer),
-                  LSTM(nodesperlayer=>nodesperlayer),
+                  Dense(nodesperlayer=>nodesperlayer, tanh),
+                  Dense(nodesperlayer=>nodesperlayer, tanh),
                   Dense(nodesperlayer=>g)
                  )
     end
     m |> gpu
-    #println("CUDA memory use: ", CUDA.used_memory()) 
     θ = Flux.params(m)
     opt = ADAM(0.01)
+    function loss(X,y)
+        Flux.reset!(m)
+        sqrt.(mean(abs2.(y-[m(x) for x ∈ X][end])))
+    end    
+    bestsofar = 1e6
+    bestmodel = deepcopy(m)
+    timesgreater = 0
+    noimprovement = 100
+    # train until there's too long a period of no improvement
     for r = 1:datareps
         x, y  = dgp(T, S)
         X_rnn = batch_timeseries(x, T, T)
         X_rnn |> gpu 
         y |> gpu
-        println("data loop $r  of $datareps") 
         for epoch ∈ 1:epochs
             Flux.reset!(m)
             ∇ = gradient(θ) do 
-                Flux.Losses.mse.([m(x) for x ∈ X_rnn][end], y) |> mean
+                loss(X_rnn, y)
             end
             Flux.update!(opt, θ, ∇)
         end
+        current = loss(X_rnn_testing, ytesting)
+        if current < bestsofar
+            bestsofar = current
+            timesgreater = 0
+            bestmodel = deepcopy(m)
+        else
+            timesgreater +=1
+        end
+        if timesgreater > noimprovement
+            break
+        end
+        if current == bestsofar
+            print("data loop $r  of $datareps, current RMSE: ")
+            printstyled("$current\n", color=:green)
+        else    
+            println("data loop $r  of $datareps, current RMSE: $current")
+        end    
     end
+    m = deepcopy(bestmodel)
     m |> cpu
     return m
 end
