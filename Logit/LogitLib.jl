@@ -16,7 +16,7 @@ end
     x = zeros(k+1, n*S) # the samples, n obs in each
     y = randn(k, S)     # the parameters used to generate samples, drawn from Gausssian prior
     for s = 1:S
-        x[:,s*n-n+1:s*n] = logit(y[1:k,s],n)  
+        x[:,s*n-n+1:s*n] = logit(y[:,s],n)  
     end
     Float32.(x), Float32.(y)
 end    

@@ -1,8 +1,84 @@
-using Flux, CUDA
+using Flux, CUDA, BSON
 
+# a structure for holding scales testing data, 
+# and information to scale new data, and to unscale
+# predictions
+struct Data
+    x::Array{Float32}
+    y::Array{Float32}
+    xinfo::Array{Float32}
+    yinfo::Array{Float32}
+end
+
+function makedata(dgp, T, S)
+    x, y = dgp(T, S)
+end
+
+# scale data, and save scaling info.
+# the output goes into the struct
+function prepdata(x, info=1)
+    if info == 1
+        s = std(x,dims=2)
+        m = mean(x, dims=2)
+        info = (m, s)
+    end
+    m = info[1]
+    s = info[2]
+    x = (x .- info[1]) ./ info[2]
+    x, info
+end
+
+function unscale(data::Data)
+end  
+
+function makemodel(layers, nodesperlayer)
+    # make the model
+    if layers == 2
+        m = Chain(
+                  LSTM(k=>nodesperlayer),
+                  Dense(nodesperlayer=>g)
+                 ) 
+    elseif layers == 3
+        m = Chain(
+                  LSTM(k=>nodesperlayer),
+                  Dense(nodesperlayer=>nodesperlayer, tanh),
+                  Dense(nodesperlayer=>g)
+                 )
+    else
+        m = Chain(
+                  LSTM(k=>nodesperlayer),
+                  Dense(nodesperlayer=>nodesperlayer, tanh),
+                  Dense(nodesperlayer=>nodesperlayer, tanh),
+                  Dense(nodesperlayer=>g)
+                 )
+    end
+    m
+end
+
+
+function saveall(name, m, data::Data)
+    BSON.@save name, m, xtesting, xinfo, ytesting, yinfo
+end    
+
+function loadall(name, m, data::Data)
+    BSON.@load name, m, data
+end
+
+function predict(data::Data, m)
+end
+
+# take a model, trained or untrained, and data, and train it
+function trainmodel(model, bestsofar, data, datareps, epochs)
+
+end
+
+#=
 function trainmodel(dgp, T, S, datareps, nodesperlayer, layers, epochs)
     # testing data
-    xtesting, ytesting = dgp(T,10000)
+    function prep!(x, xm, xs)
+        x = (x .- xm) ./ xs
+
+    end    
     X_rnn_testing = batch_timeseries(xtesting, T, T)
     X_rnn_testing |> gpu
     ytesting |> gpu
@@ -30,7 +106,7 @@ function trainmodel(dgp, T, S, datareps, nodesperlayer, layers, epochs)
     end
     m |> gpu
     θ = Flux.params(m)
-    opt = ADAM(0.01)
+    opt = ADAM()
     function loss(X,y)
         Flux.reset!(m)
         sqrt.(mean(abs2.(y-[m(x) for x ∈ X][end])))
@@ -40,8 +116,14 @@ function trainmodel(dgp, T, S, datareps, nodesperlayer, layers, epochs)
     timesgreater = 0
     noimprovement = 100
     # train until there's too long a period of no improvement
+    current = loss(X_rnn_testing, ytesting)
+    print("Initial RMSE: ")
+    printstyled("$current\n", color=:blue)
     for r = 1:datareps
         x, y  = dgp(T, S)
+        prep!(x, xm, xs)
+        prep!(y, ym, ys)
+        #prep!(y, ymin, ymax)
         X_rnn = batch_timeseries(x, T, T)
         X_rnn |> gpu 
         y |> gpu
@@ -97,4 +179,4 @@ function batch_timeseries(X, s::Int, r::Int)
     end
 end
 
-
+=#
