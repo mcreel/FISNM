@@ -16,17 +16,19 @@ end
 function dgp(n, S)
     y = zeros(6, S)     # the parameters for each sample
     x = zeros(1,n*S)    # the Garch data for each sample
+    ms = [0.036, -0.098, -0.054, -0.25, 0.93, 0.12]
+    ss = [0.018, 0.041, 0.019, 0.036, 0.018, 0.042]
     for s = 1:S
-        # draw the params from their priors, informed by fit to SP500. Draws are from Gaussian with the estimated means and std. errors.
-        μ = rand(Normal(0.037, 0.018))
-        ρ = rand(Normal(-0.097, 0.041))
-        ω = rand(Normal(-0.054, 0.019)) 
-        γ = rand(Normal(-0.25, 0.036))
+        # draw the params from their priors, informed by fit to SP500. Draws are from uniform with mean equal to estimated parameters, and over +/- 5 sds.
+        μ = ms[1] + 10.0*ss[1]*rand() - 5.0*ss[1]
+        ρ = ms[2] + 10.0*ss[2]*rand() - 5.0*ss[2]
+        ω = ms[3] + 10.0*ss[3]*rand() - 5.0*ss[3]
+        γ = ms[4] + 10.0*ss[4]*rand() - 5.0*ss[4]
+        α = ms[6] + 10.0*ss[6]*rand() - 5.0*ss[6]
         β = 1.1 # make sure β is in stationary region
-        while β > 1.0
-            β = rand(Normal(0.93, 0.018))
+        while β > 0.99
+            β = ms[5] + 10.0*ss[5]*rand() - 5.0*ss[5]
         end    
-        α = rand(Normal(0.12, 0.04))
         # the parameter vector
         θ = [μ, ρ, ω, γ, β, α]
         # get y and x for the sample s
