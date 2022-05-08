@@ -1,5 +1,3 @@
-* generate testing data only once, and use it for ML too
-* save the data scaling from the testing model for re-use
 * save the best model at end of training, so it can be trained additionally
 in a future session.
 * create a predict function that takes care of unscaling
