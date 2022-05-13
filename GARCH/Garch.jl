@@ -21,12 +21,16 @@ function makemodels()
     end
 end
 
-@views function main()
+function loss(m, X,y)
+    Flux.reset!(m)
+    Flux.Losses.mse(y, [m(x) for x ∈ X][end])
+end    
+
+@inbounds @views function main()
     # train model
     model = "m1.bson"
-    @load model m bestsofar
-
     !isfile(model) ? makemodels() : nothing
+    @load model m bestsofar
     epochs = 10
     @load "data.bson" xtesting ytesting xtraining ytraining yinfo
 
@@ -36,30 +40,31 @@ end
     xtraining |> gpu
     ytraining |> gpu
 
-    reps = 100
+    T = 300 # length of sequences for training
+    S = 128  # batch size
+    start = rand(1:1000-T+1)
+    stop = start+T-1
+    epochs = 100
+    learningrate = 0.0001
+    reps = 10
+
     for r = 1:reps
         # create batch
-        T = 100 # length of sequences for training
-        S = 64  # batch size
-        start = rand(1:1000-T)
-        stop = start+T
-        x = xtesting[start:stop]
+        @views x = xtesting[start:stop]
         ind = rand(1:10000,S) # indices of samples in batch
-        x = [x[i][ind]' for i in 1: T]
-        y = ytesting[:,ind] 
-        
+        @views x = [x[i][ind]' for i in 1: T]
+        @views y = ytesting[:,ind] 
+        x |> gpu 
+        y |> gpu 
         # do the training with the batch
-        epochs = 100
-        learningrate = 0.0001
         @time trainmodel!(m, epochs, learningrate, x, y)
-
-        @time current = loss(xtesting, ytesting)
+        @time current = loss(m, xtesting, ytesting)
         printstyled("Best loss so far: $bestsofar\n", color=:blue)
         println("current loss: $current")
         if current < bestsofar
-            println("updating model with new best so far")
+            printstyled("updating model with new best so far\n", color=:green)
             bestsofar = copy(current)
             BSON.@save model m bestsofar
         end
-    end    
+    end
 end

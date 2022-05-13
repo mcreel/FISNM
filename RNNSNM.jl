@@ -20,11 +20,6 @@ function unscaledata(x, info)
     x .* info[2] .+ info[1]
 end  
 
-function loss(X,y)
-    Flux.reset!(m)
-    Flux.Losses.mse(y, [m(x) for x ∈ X][end])
-end    
-
 # takes training data and trains model for some epochs
 # writes out model if new best is found
 # model is a BSON file containing 
@@ -36,7 +31,7 @@ function trainmodel!(m, epochs, learningrate, xtrain, ytrain)
     for epoch ∈ 1:epochs
         Flux.reset!(m)
         ∇ = gradient(θ) do 
-            loss(xtrain, ytrain)
+            loss(m, xtrain, ytrain)
         end
         Flux.update!(opt, θ, ∇)
     end   
