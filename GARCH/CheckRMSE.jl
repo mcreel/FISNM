@@ -2,7 +2,7 @@ using BSON: @load
 using Flux, PrettyTables, Statistics
 @load "TestingData.bson" xtesting xinfo ytesting yinfo
 @load "ML_results.bson" mlrmse
-@load "2_10.bson" m
+@load "m1.bson" m
 # NN preds
 pred = [m(x) for x in xtesting][end]
 e = yinfo[2] .* (ytesting .- pred)

@@ -20,33 +20,19 @@ function unscaledata(x, info)
     x .* info[2] .+ info[1]
 end  
 
+function loss(X,y)
+    Flux.reset!(m)
+    Flux.Losses.mse(y, [m(x) for x ∈ X][end])
+end    
 
 # takes training data and trains model for some epochs
 # writes out model if new best is found
 # model is a BSON file containing 
 # m, the model configuration
 # bestsofar, the best loss value so far
-function trainmodel(model, xtesting, xinfo, ytesting, yinfo, epochs, T, S)
-    # make the training data
-    xtrain, ytrain  = dgp(T, S)
-    xtrain, junk = scaledata(xtrain, xinfo)
-    ytrain, junk = scaledata(ytrain, yinfo)
-    # batch it
-    xtrain = batch_timeseries(xtrain, T, T)
-    xtrain |> gpu
-    ytrain |> gpu
-    # load the model
-    BSON.@load model m bestsofar
-    bestmodel = deepcopy(m)
-    m |> gpu
+function trainmodel!(m, epochs, learningrate, xtrain, ytrain)
     θ = Flux.params(m)
-    opt = ADAM()
-    function loss(X,y)
-        Flux.reset!(m)
-        Flux.Losses.mse(y, [m(x) for x ∈ X][end])
-    end    
-    print("Initial MSE: ")
-    printstyled("$bestsofar\n", color=:blue)
+    opt = ADAM(learningrate)
     for epoch ∈ 1:epochs
         Flux.reset!(m)
         ∇ = gradient(θ) do 
@@ -54,16 +40,6 @@ function trainmodel(model, xtesting, xinfo, ytesting, yinfo, epochs, T, S)
         end
         Flux.update!(opt, θ, ∇)
     end   
-    m |> cpu
-    Flux.reset!(m)
-    current = loss(xtesting,ytesting)
-    println("bestsofar: $bestsofar")
-    println("current: $current")
-    if current < bestsofar
-        println("updating model with new best so far")
-        bestsofar = copy(current)
-        BSON.@save model m bestsofar
-    end
     nothing
 end
 

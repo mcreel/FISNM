@@ -12,23 +12,54 @@ function makemodels()
     model = "m1.bson"
     if !isfile(model)
         m = Chain(
-            Dense(1=>20, tanh),
-            LSTM(20=>20),
-            Dense(20, 50, tanh),
-            Dense(50=>5)
+            LSTM(1 =>20),
+            Dense(20=>20, tanh),
+            Dense(20=>5)
         ) 
         bestsofar = 1e6
         BSON.@save model  m bestsofar
     end
 end
 
-function main(model)
+@views function main()
     # train model
-    epochs = 1
-    T = 100
-    S = 100
-    @load "TestingData.bson" xtesting xinfo ytesting yinfo
-    for i = 1:10000
-    m = trainmodel(model, xtesting, xinfo, ytesting, yinfo, epochs, T, S)
-    end
+    model = "m1.bson"
+    @load model m bestsofar
+
+    !isfile(model) ? makemodels() : nothing
+    epochs = 10
+    @load "data.bson" xtesting ytesting xtraining ytraining yinfo
+
+    m |> gpu
+    xtesting |> gpu
+    ytesting |> gpu
+    xtraining |> gpu
+    ytraining |> gpu
+
+    reps = 100
+    for r = 1:reps
+        # create batch
+        T = 100 # length of sequences for training
+        S = 64  # batch size
+        start = rand(1:1000-T)
+        stop = start+T
+        x = xtesting[start:stop]
+        ind = rand(1:10000,S) # indices of samples in batch
+        x = [x[i][ind]' for i in 1: T]
+        y = ytesting[:,ind] 
+        
+        # do the training with the batch
+        epochs = 100
+        learningrate = 0.0001
+        @time trainmodel!(m, epochs, learningrate, x, y)
+
+        @time current = loss(xtesting, ytesting)
+        printstyled("Best loss so far: $bestsofar\n", color=:blue)
+        println("current loss: $current")
+        if current < bestsofar
+            println("updating model with new best so far")
+            bestsofar = copy(current)
+            BSON.@save model m bestsofar
+        end
+    end    
 end
