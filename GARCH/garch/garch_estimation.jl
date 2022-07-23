@@ -1,34 +1,37 @@
 include("GarchLib.jl")
 include("neuralnets.jl")
+include("fmincon.jl")
+using Plots, Random
 
-using Plots, PrettyTables
-using Random
-
-
+function main()
 # General parameters
-S = 1_000 # Number of samples for each estimation
-N = 10:10:300 # Number of observations per sample
+S = 100 # Number of Monte Carlo samples for each sample size
+N = [100, 400, 1600]  # Sample sizes (most useful to incease by 4X)
 seed = 72 # Random seed
 
-# Estimation using ARCHModels.jl
+# Estimation by ML
 # ------------------------------------------------------------------------------
 Random.seed!(seed)
-err_pkg = zeros(5, S, length(N))
+err_mle = zeros(5, S, length(N))
 # Iterate over different lengths of observed returns
 for (i, n) ∈ enumerate(N) 
     X, Y = dgp(n, S) # Generate the data according to DGP
-    # Fit GARCH models using ARCHModels.jl on each sample and compute error
+    # Fit GARCH models by ML on each sample and compute error
     for s ∈ 1:S
         try
-            est = fit(GARCH{1, 1}, X[:, s], meanspec=AR{1})
-            @show est.fitted
-            pretty_table([coef(est)' Y[:,s]])
-            err_pkg[:, s, i] = coef(est) .- Y[:, s] # Compute errors
+            θstart = Float64.([mean(X[:,s]); 0.0; var(X[:,s]); 0.1; 0.1])
+            obj = θ -> -mean(garch11(θ, Float64.(X[:,s])))
+            lb = [-Inf, -1.0, 1e-5, 0.0, 0.0]
+            ub = [Inf, 1.0, Inf, 1.0, 1.0] 
+            θhat, logL, convergence  = fmincon(obj, θstart, [], [], lb, ub)
+            println("convergence: $convergence")
+            err_mle[:, s, i] = θhat  .- Y[:, s] # Compute errors
         catch
+            println("s: $s")
             println("GARCH ML crash")
         end   
     end
-    println("ARCHModels.jl n = $n done.")
+    println("ML n = $n done.")
 end
 
 # NNet estimation (nnet object must be pre-trained!)
@@ -44,7 +47,7 @@ err_nnet = zeros(5, S, length(N))
 # Iterate over different lengths of observed returns
 for (i, n) ∈ enumerate(N)
     # Fit data transformation which we will later use to rescale our nnet output
-    X, Y = dgp(n, S)
+    X, Y = dgp(n, 1000)  # S should be large here, no? No reason to be constrained to be same as number of  MonteCarlo reps
     dtY = fit(ZScoreTransform, Y)
     # Create network with 32 hidden nodes and 20% dropout rate
     nnet = lstm_net(32, .2)
@@ -67,21 +70,21 @@ end
 
 # Plotting the results
 # ------------------------------------------------------------------------------
-k = size(err_pkg, 1) # Number of parameters
+k = size(err_mle, 1) # Number of parameters
 # Compute squared errors
-err_pkg² = abs2.(err_pkg);
+err_mle² = abs2.(err_mle);
 err_nnet² = abs2.(err_nnet);
 # Compute RMSE for each individual parameter
-rmse_pkg = permutedims(reshape(sqrt.(mean(err_pkg², dims=2)), k, length(N)));
+rmse_mle = permutedims(reshape(sqrt.(mean(err_mle², dims=2)), k, length(N)));
 rmse_nnet = permutedims(reshape(sqrt.(mean(err_nnet², dims=2)), k, length(N)));
 # Compute RMSE aggregate
-rmse_pkg_agg = mean(rmse_pkg, dims=2);
+rmse_mle_agg = mean(rmse_mle, dims=2);
 rmse_nnet_agg = mean(rmse_nnet, dims=2);
 
-plot(N, rmse_pkg, xlab="Number of observations", ylab="RMSE", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (ARCHModels.jl)", ["ω" "β" "α" "μ" "ρ"]),
+plot(N, rmse_mle, xlab="Number of observations", ylab="RMSE", size=(1200, 800), 
+    lw=2, lab=map(x -> x * " (MLE)", ["ω" "β" "α" "μ" "ρ"]),
     col=first(palette(:tab10), k))
-plot!(N, rmse_pkg_agg, lab="Aggregate (ARCHModels.jl)", c=:black, lw=3)
+plot!(N, rmse_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3)
 
 plot!(N, rmse_nnet, lw=2, ls=:dash, 
     lab=map(x -> x * " (NNet)", ["ω" "β" "α" "μ" "ρ"]),
@@ -91,16 +94,16 @@ plot!(N, rmse_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 savefig("rmse_benchmark.png")
 
 # Compute bias for each individual parameter
-bias_pkg = permutedims(reshape(mean(err_pkg, dims=2), k, length(N)));
+bias_mle = permutedims(reshape(mean(err_mle, dims=2), k, length(N)));
 bias_nnet = permutedims(reshape(mean(err_nnet, dims=2), k, length(N)));
 # Compute bias aggregate
-bias_pkg_agg = mean(bias_pkg, dims=2);
+bias_mle_agg = mean(bias_mle, dims=2);
 bias_nnet_agg = mean(bias_nnet, dims=2);
 
-plot(N, bias_pkg, xlab="Number of observations", ylab="Bias", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (ARCHModels.jl)", ["ω" "β" "α" "μ" "ρ"]),
+plot(N, bias_mle, xlab="Number of observations", ylab="Bias", size=(1200, 800), 
+    lw=2, lab=map(x -> x * " (MLE)", ["ω" "β" "α" "μ" "ρ"]),
     col=first(palette(:tab10), k))
-plot!(N, bias_pkg_agg, lab="Aggregate (ARCHModels.jl)", c=:black, lw=3)
+plot!(N, bias_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3)
 
 plot!(N, bias_nnet, lw=2, ls=:dash, 
     lab=map(x -> x * " (NNet)", ["ω" "β" "α" "μ" "ρ"]),
@@ -108,3 +111,6 @@ plot!(N, bias_nnet, lw=2, ls=:dash,
 plot!(N, bias_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 
 savefig("bias_benchmark.png")
+
+end
+main()

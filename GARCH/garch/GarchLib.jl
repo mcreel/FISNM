@@ -13,7 +13,7 @@ end
 # returns are:
 # x: 1 X S*n vector of data from EGARCH model
 # y: 6 X S*n vector of parameters used to generate each sample
-function dgp(n, S)
+@views function dgp(n, S)
     y = zeros(5, S)     # the parameters for each sample
     x = zeros(n, S)    # the Garch data for each sample
     ms = [0.066, -0.08, 0.047, 0.72, 0.19]
@@ -39,6 +39,24 @@ function dgp(n, S)
     end
     Float32.(x), Float32.(y)
 end    
+
+# the likelihood function
+@views function garch11(θ, y)
+    # dissect the parameter vector
+    μ, ρ, ω, β, α  = θ
+    ylag = y[1:end-1]
+    y = y[2:end]
+    ϵ = y .- μ .- ρ*ylag
+    n = size(ϵ,1)
+    h = zeros(n)
+    # initialize variance; either of these next two are reasonable choices
+    #h[1] = var(y[1:10])
+    h[1] = var(y)
+    for t = 2:n
+        h[t] = ω + α*(ϵ[t-1])^2. + β*h[t-1]
+    end
+    logL = -log(sqrt(2.0*pi)) .- 0.5*log.(h) .- 0.5*(ϵ.^2.)./h
+end
 
 function batch(x,y)
     n, b = size(x) # series length (n) and number of samples (b)

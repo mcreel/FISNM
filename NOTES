@@ -1,3 +1,2 @@
-* save the best model at end of training, so it can be trained additionally
-in a future session.
-* create a predict function that takes care of unscaling
+* currently, the GARCH model is only one using the up-to-date methods. The others will need to be
+  updated
