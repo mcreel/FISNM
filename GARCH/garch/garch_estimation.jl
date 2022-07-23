@@ -5,19 +5,23 @@ using Plots, Random
 
 function main()
 # General parameters
-S = 100 # Number of Monte Carlo samples for each sample size
-N = [100, 400, 1600]  # Sample sizes (most useful to incease by 4X)
-seed = 72 # Random seed
+MCreps = 400 # Number of Monte Carlo samples for each sample size
+TrainSize = 160 # samples in each epoch
+N = [100, 200, 400, 800, 1600]  # Sample sizes (most useful to incease by 4X)
+testseed = 72
+trainseed = 999
+transformseed = 1204
 
 # Estimation by ML
 # ------------------------------------------------------------------------------
-Random.seed!(seed)
-err_mle = zeros(5, S, length(N))
+
+err_mle = zeros(5, MCreps, length(N))
 # Iterate over different lengths of observed returns
 for (i, n) ∈ enumerate(N) 
-    X, Y = dgp(n, S) # Generate the data according to DGP
+    Random.seed!(testseed) # samples for ML and for NN use same seed
+    X, Y = dgp(n, MCreps) # Generate the data according to DGP
     # Fit GARCH models by ML on each sample and compute error
-    for s ∈ 1:S
+    Threads.@threads for s ∈ 1:MCreps
         try
             θstart = Float64.([mean(X[:,s]); 0.0; var(X[:,s]); 0.1; 0.1])
             obj = θ -> -mean(garch11(θ, Float64.(X[:,s])))
@@ -33,11 +37,8 @@ for (i, n) ∈ enumerate(N)
     end
     println("ML n = $n done.")
 end
-
 # NNet estimation (nnet object must be pre-trained!)
 # ------------------------------------------------------------------------------
-Random.seed!(seed)
-err_nnet = zeros(5, S, length(N))
 # We standardize the outputs for the MSE to not be overly influenced by the
 # parameters which are larger in absolute value than others. Because of this,
 # we need to fit a data transformation on the labels. Thus, we use the dgp()
@@ -45,16 +46,22 @@ err_nnet = zeros(5, S, length(N))
 # this way we don't have the problem of fitting a transformation on our 
 # test set.
 # Iterate over different lengths of observed returns
-for (i, n) ∈ enumerate(N)
+
+err_nnet = zeros(5, MCreps, length(N))
+Threads.@threads for i = 1:size(N,1)
+    n = N[i]
     # Fit data transformation which we will later use to rescale our nnet output
-    X, Y = dgp(n, 1000)  # S should be large here, no? No reason to be constrained to be same as number of  MonteCarlo reps
-    dtY = fit(ZScoreTransform, Y)
+    Random.seed!(transformseed) # use other seed this, to avoid sample contamination for NN training
+    Xtransf, Ytransf = dgp(n, TrainSize)  # S should be large here, no? No reason to be constrained to be same as number of  MonteCarlo reps
+    dtY = fit(ZScoreTransform, Ytransf)
     # Create network with 32 hidden nodes and 20% dropout rate
     nnet = lstm_net(32, .2)
     # Train network (it seems we can still improve by going over 200 epochs!)
-    train_rnn!(nnet, ADAM(), dgp, n, S, epochs=200)
+    Random.seed!(trainseed) # use other seed this, to avoid sample contamination for NN training
+    train_rnn!(nnet, ADAM(), dgp, n, TrainSize, epochs=200)
     # Compute network error on a new batch
-    X, Y = dgp(n, S) # Generate data according to DGP
+    Random.seed!(testseed)
+    X, Y = dgp(n, MCreps) # Generate data according to DGP
     X = tabular2rnn(X) # Transform to rnn format
     # Get NNet estimate of parameters for each sample
     Flux.testmode!(nnet) # In case nnet has dropout / batchnorm

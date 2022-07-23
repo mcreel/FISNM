@@ -1,2 +1,5 @@
 * currently, the GARCH model is only one using the up-to-date methods. The others will need to be
   updated
+* the garch code can possibly  train a single RNN that can predict using sequences (sample sizes) of any length.
+    in the training part, generate samples of random size
+* the code now uses threading over the loops
