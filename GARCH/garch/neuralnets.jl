@@ -15,7 +15,7 @@ lstm_net(n_hidden, dropout_rate) = Chain(
     
 # Trains a recurrent neural network
 function train_rnn!(
-    m, opt, dgp, n, S; 
+    m, opt, dgp, n, S, dtY; 
     epochs=100, batchsize=32, dev=cpu, loss=rmse_loss
 )
     Flux.trainmode!(m) # In case we have dropout / batchnorm
@@ -25,7 +25,7 @@ function train_rnn!(
     for epoch ∈ 1:epochs
         X, Y = dgp(n, S) # Generate a new batch
         # Standardize targets for MSE scaling
-        dtY = fit(ZScoreTransform, Y) 
+#        dtY = fit(ZScoreTransform, Y) 
         StatsBase.transform!(dtY, Y)
 
         # ----- Minibatch training ---------------------------------------------

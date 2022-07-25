@@ -1,8 +1,7 @@
 include("GarchLib.jl")
 include("neuralnets.jl")
 include("fmincon.jl")
-using Plots, Random
-
+using Plots, Random, BSON
 function main()
 # General parameters
 MCreps = 400 # Number of Monte Carlo samples for each sample size
@@ -14,7 +13,7 @@ transformseed = 1204
 
 # Estimation by ML
 # ------------------------------------------------------------------------------
-
+#=
 err_mle = zeros(5, MCreps, length(N))
 # Iterate over different lengths of observed returns
 for (i, n) ∈ enumerate(N) 
@@ -37,6 +36,10 @@ for (i, n) ∈ enumerate(N)
     end
     println("ML n = $n done.")
 end
+BSON.@save "err_mle.bson" err_mle
+=#
+BSON.@load "err_mle.bson" err_mle
+
 # NNet estimation (nnet object must be pre-trained!)
 # ------------------------------------------------------------------------------
 # We standardize the outputs for the MSE to not be overly influenced by the
@@ -45,20 +48,18 @@ end
 # function to generate a batch which we ONLY use to fit this transformation,
 # this way we don't have the problem of fitting a transformation on our 
 # test set.
-# Iterate over different lengths of observed returns
+Random.seed!(transformseed) # avoid sample contamination for NN training
+dtY = fit(ZScoreTransform, PriorDraw(100000)) # use a large sample for this
 
+# Iterate over different lengths of observed returns
 err_nnet = zeros(5, MCreps, length(N))
 Threads.@threads for i = 1:size(N,1)
     n = N[i]
-    # Fit data transformation which we will later use to rescale our nnet output
-    Random.seed!(transformseed) # use other seed this, to avoid sample contamination for NN training
-    Xtransf, Ytransf = dgp(n, TrainSize)  # S should be large here, no? No reason to be constrained to be same as number of  MonteCarlo reps
-    dtY = fit(ZScoreTransform, Ytransf)
     # Create network with 32 hidden nodes and 20% dropout rate
     nnet = lstm_net(32, .2)
     # Train network (it seems we can still improve by going over 200 epochs!)
     Random.seed!(trainseed) # use other seed this, to avoid sample contamination for NN training
-    train_rnn!(nnet, ADAM(), dgp, n, TrainSize, epochs=200)
+    train_rnn!(nnet, ADAM(), dgp, n, TrainSize, dtY, epochs=200)
     # Compute network error on a new batch
     Random.seed!(testseed)
     X, Y = dgp(n, MCreps) # Generate data according to DGP
