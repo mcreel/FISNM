@@ -1,43 +1,41 @@
 include("GarchLib.jl")
 include("neuralnets.jl")
-include("fmincon.jl")
-using Plots, Random, BSON
-#function main()
+include("samin.jl")
+using Plots, Random, BSON, DelimitedFiles
+function main()
 # General parameters
-MCreps = 400 # Number of Monte Carlo samples for each sample size
-TrainSize = 160 # samples in each epoch
-N = [100, 200, 400, 800, 1600]  # Sample sizes (most useful to incease by 4X)
-testseed = 72
+MCreps = 500 # Number of Monte Carlo samples for each sample size
+TrainSize = 1024 # samples in each epoch
+N = [200, 400, 800]  # Sample sizes (most useful to incease by 4X)
+testseed = 782
 trainseed = 999
 transformseed = 1204
 
 # Estimation by ML
 # ------------------------------------------------------------------------------
-#=
-err_mle = zeros(5, MCreps, length(N))
+err_mle = zeros(3, MCreps, length(N))
+thetahat_mle = similar(err_mle)
+thetatrue = similar(err_mle)
 # Iterate over different lengths of observed returns
 for (i, n) ∈ enumerate(N) 
     Random.seed!(testseed) # samples for ML and for NN use same seed
     X, Y = dgp(n, MCreps) # Generate the data according to DGP
     # Fit GARCH models by ML on each sample and compute error
     Threads.@threads for s ∈ 1:MCreps
-        try
-            θstart = Float64.([mean(X[:,s]); 0.0; var(X[:,s]); 0.1; 0.1])
-            obj = θ -> -mean(garch11(θ, Float64.(X[:,s])))
-            lb = [-Inf, -1.0, 1e-5, 0.0, 0.0]
-            ub = [Inf, 1.0, Inf, 1.0, 1.0] 
-            θhat, logL, convergence  = fmincon(obj, θstart, [], [], lb, ub)
-            println("convergence: $convergence")
-            err_mle[:, s, i] = θhat  .- Y[:, s] # Compute errors
-        catch
-            println("s: $s")
-            println("GARCH ML crash")
-        end   
+        θstart = Float64.([0.1, 0.5, 0.5])
+        obj = θ -> -mean(garch11(θ, Float64.(X[:,s])))
+        lb = [0.001, 0.0, 0.0]
+        ub = [0.999, 0.99, 1.0]
+        θhat, junk, junk, junk= samin(obj, θstart, lb, ub, verbosity=0)
+        err_mle[:, s, i] = θhat  .- Y[:, s] # Compute errors
+        thetahat_mle[:,s,i] = θhat
+        thetatrue[:,s,i] = Y[:,s]
     end
     println("ML n = $n done.")
 end
 BSON.@save "err_mle.bson" err_mle
-=#
+BSON.@save "thetahat_mle.bson" θhat_mle
+BSON.@save "thetatrue.bson" θ_true
 BSON.@load "err_mle.bson" err_mle
 
 # NNet estimation (nnet object must be pre-trained!)
@@ -52,8 +50,9 @@ Random.seed!(transformseed) # avoid sample contamination for NN training
 dtY = fit(ZScoreTransform, PriorDraw(100000)) # use a large sample for this
 
 # Iterate over different lengths of observed returns
-err_nnet = zeros(5, MCreps, length(N))
-trueys = similar(err_nnet)
+err_nnet = zeros(3, MCreps, length(N))
+θhat_nnet = similar(err_nnet)
+θ_true = similar(err_nnet)
 Threads.@threads for i = 1:size(N,1)
     n = N[i]
     # Create network with 32 hidden nodes and 20% dropout rate
@@ -68,11 +67,18 @@ Threads.@threads for i = 1:size(N,1)
     # Get NNet estimate of parameters for each sample
     Flux.testmode!(nnet) # In case nnet has dropout / batchnorm
     Flux.reset!(nnet)
-    [nnet(x) for x ∈ X[1:end-1]] # Run network up to penultimate X
+    #[nnet(x) for x ∈ X[1:end-1]] # Run network up to penultimate X
     # Compute prediction and error
-    Ŷ = StatsBase.reconstruct(dtY, nnet(X[end]))
+    #Ŷ = StatsBase.reconstruct(dtY, nnet(X[end]))
+    # Alternative: this is averaging prediction at each observation in sample
+    Ŷ = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X])
     err_nnet[:, :, i] = Ŷ - Y
-    trueys[:,:,i] = Y
+    θhat_nnet[:,:,i] = Ŷ 
+    θ_true[:,:,i] = Y
+
+    BSON.@save "err_nnet.bson" err_nnet
+    BSON.@save "thetahat_nnet.bson" θhat_nnet
+
     # Save model as BSON
     BSON.@save "models/nnet_(n-$n).bson" nnet
     println("Neural network, n = $n done.")
@@ -92,12 +98,12 @@ rmse_mle_agg = mean(rmse_mle, dims=2);
 rmse_nnet_agg = mean(rmse_nnet, dims=2);
 
 plot(N, rmse_mle, xlab="Number of observations", ylab="RMSE", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (MLE)", ["ω" "β" "α" "μ" "ρ"]),
+    lw=2, lab=map(x -> x * " (MLE)", ["ω" "β" "α"]),
     col=first(palette(:tab10), k))
 plot!(N, rmse_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3)
 
 plot!(N, rmse_nnet, lw=2, ls=:dash, 
-    lab=map(x -> x * " (NNet)", ["ω" "β" "α" "μ" "ρ"]),
+    lab=map(x -> x * " (NNet)", ["ω" "β" "α"]),
     col=first(palette(:tab10), k))
 plot!(N, rmse_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 
@@ -111,16 +117,17 @@ bias_mle_agg = mean(bias_mle, dims=2);
 bias_nnet_agg = mean(bias_nnet, dims=2);
 
 plot(N, bias_mle, xlab="Number of observations", ylab="Bias", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (MLE)", ["ω" "β" "α" "μ" "ρ"]),
+    lw=2, lab=map(x -> x * " (MLE)", ["ω" "β" "α"]),
     col=first(palette(:tab10), k))
 plot!(N, bias_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3)
 
 plot!(N, bias_nnet, lw=2, ls=:dash, 
-    lab=map(x -> x * " (NNet)", ["ω" "β" "α" "μ" "ρ"]),
+    lab=map(x -> x * " (NNet)", ["ω" "β" "α"]),
     col=first(palette(:tab10), k))
 plot!(N, bias_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 
 savefig("bias_benchmark.png")
 
-#end
-#main()
+end
+main()
+

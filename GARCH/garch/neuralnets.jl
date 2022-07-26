@@ -10,7 +10,7 @@ lstm_net(n_hidden, dropout_rate) = Chain(
     LSTM(n_hidden, n_hidden),
     Dropout(dropout_rate),
     LSTM(n_hidden, n_hidden),
-    Dense(n_hidden, 5)
+    Dense(n_hidden, 3)
 )
     
 # Trains a recurrent neural network
