@@ -25,6 +25,8 @@ function train_rnn!(
     for epoch ∈ 1:epochs
         X, Y = dgp(n, S) # Generate a new batch
         # Standardize targets for MSE scaling
+        # no need to do this for every sample, use a high accuracy
+        # transform from large draw from prior
 #        dtY = fit(ZScoreTransform, Y) 
         StatsBase.transform!(dtY, Y)
 

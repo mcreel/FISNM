@@ -7,14 +7,15 @@ using Plots, Random, BSON
 MCreps = 400 # Number of Monte Carlo samples for each sample size
 TrainSize = 160 # samples in each epoch
 N = [100, 200, 400, 800, 1600]  # Sample sizes (most useful to incease by 4X)
+N = [400, 800]  # Sample sizes (most useful to incease by 4X)
 testseed = 72
 trainseed = 999
 transformseed = 1204
 
 # Estimation by ML
 # ------------------------------------------------------------------------------
-#=
 err_mle = zeros(5, MCreps, length(N))
+theta_mle = zeros(5, MCreps, length(N))
 # Iterate over different lengths of observed returns
 for (i, n) ∈ enumerate(N) 
     Random.seed!(testseed) # samples for ML and for NN use same seed
@@ -26,9 +27,10 @@ for (i, n) ∈ enumerate(N)
             obj = θ -> -mean(garch11(θ, Float64.(X[:,s])))
             lb = [-Inf, -1.0, 1e-5, 0.0, 0.0]
             ub = [Inf, 1.0, Inf, 1.0, 1.0] 
-            θhat, logL, convergence  = fmincon(obj, θstart, [], [], lb, ub)
+            θhat, logL, convergence  = fmincon(obj, θstart, lb, ub)
             println("convergence: $convergence")
             err_mle[:, s, i] = θhat  .- Y[:, s] # Compute errors
+            theta_mle[:, s, i] = θhat
         catch
             println("s: $s")
             println("GARCH ML crash")
@@ -37,7 +39,7 @@ for (i, n) ∈ enumerate(N)
     println("ML n = $n done.")
 end
 BSON.@save "err_mle.bson" err_mle
-=#
+#=
 BSON.@load "err_mle.bson" err_mle
 
 # NNet estimation (nnet object must be pre-trained!)
@@ -53,7 +55,6 @@ dtY = fit(ZScoreTransform, PriorDraw(100000)) # use a large sample for this
 
 # Iterate over different lengths of observed returns
 err_nnet = zeros(5, MCreps, length(N))
-trueys = similar(err_nnet)
 Threads.@threads for i = 1:size(N,1)
     n = N[i]
     # Create network with 32 hidden nodes and 20% dropout rate
@@ -68,11 +69,12 @@ Threads.@threads for i = 1:size(N,1)
     # Get NNet estimate of parameters for each sample
     Flux.testmode!(nnet) # In case nnet has dropout / batchnorm
     Flux.reset!(nnet)
-    [nnet(x) for x ∈ X[1:end-1]] # Run network up to penultimate X
+    #[nnet(x) for x ∈ X[1:end-1]] # Run network up to penultimate X
     # Compute prediction and error
-    Ŷ = StatsBase.reconstruct(dtY, nnet(X[end]))
+    # this is averaging prediction at each observation in sample
+    Ŷ = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X])
     err_nnet[:, :, i] = Ŷ - Y
-    trueys[:,:,i] = Y
+
     # Save model as BSON
     BSON.@save "models/nnet_(n-$n).bson" nnet
     println("Neural network, n = $n done.")
@@ -122,5 +124,6 @@ plot!(N, bias_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 
 savefig("bias_benchmark.png")
 
-#end
-#main()
+end
+main()
+=#

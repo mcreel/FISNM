@@ -63,8 +63,8 @@ end
     n = size(ϵ,1)
     h = zeros(n)
     # initialize variance; either of these next two are reasonable choices
-    #h[1] = var(y[1:10])
-    h[1] = var(y)
+    h[1] = var(y[1:10])
+    #h[1] = var(y)
     for t = 2:n
         h[t] = ω + α*(ϵ[t-1])^2. + β*h[t-1]
     end
