@@ -4,13 +4,14 @@ include("samin.jl")
 using Plots, Random, BSON, DelimitedFiles
 function main()
 # General parameters
-MCreps = 500 # Number of Monte Carlo samples for each sample size
-TrainSize = 1024 # samples in each epoch
-N = [200, 400, 800]  # Sample sizes (most useful to incease by 4X)
+MCreps = 1000 # Number of Monte Carlo samples for each sample size
+TrainSize = 2048 # samples in each epoch
+N = [100, 200, 400]  # Sample sizes (most useful to incease by 4X)
 testseed = 782
 trainseed = 999
 transformseed = 1204
 
+#=
 # Estimation by ML
 # ------------------------------------------------------------------------------
 err_mle = zeros(3, MCreps, length(N))
@@ -34,8 +35,9 @@ for (i, n) ∈ enumerate(N)
     println("ML n = $n done.")
 end
 BSON.@save "err_mle.bson" err_mle
-BSON.@save "thetahat_mle.bson" θhat_mle
-BSON.@save "thetatrue.bson" θ_true
+BSON.@save "thetahat_mle.bson" thetahat_mle
+BSON.@save "thetatrue.bson" thetatrue
+=#
 BSON.@load "err_mle.bson" err_mle
 
 # NNet estimation (nnet object must be pre-trained!)
@@ -51,8 +53,7 @@ dtY = fit(ZScoreTransform, PriorDraw(100000)) # use a large sample for this
 
 # Iterate over different lengths of observed returns
 err_nnet = zeros(3, MCreps, length(N))
-θhat_nnet = similar(err_nnet)
-θ_true = similar(err_nnet)
+thetahat_nnet = similar(err_nnet)
 Threads.@threads for i = 1:size(N,1)
     n = N[i]
     # Create network with 32 hidden nodes and 20% dropout rate
@@ -73,11 +74,10 @@ Threads.@threads for i = 1:size(N,1)
     # Alternative: this is averaging prediction at each observation in sample
     Ŷ = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X])
     err_nnet[:, :, i] = Ŷ - Y
-    θhat_nnet[:,:,i] = Ŷ 
-    θ_true[:,:,i] = Y
+    thetahat_nnet[:,:,i] = Ŷ 
 
     BSON.@save "err_nnet.bson" err_nnet
-    BSON.@save "thetahat_nnet.bson" θhat_nnet
+    BSON.@save "thetahat_nnet.bson" thetahat_nnet
 
     # Save model as BSON
     BSON.@save "models/nnet_(n-$n).bson" nnet
