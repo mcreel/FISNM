@@ -6,12 +6,12 @@ function main()
 # General parameters
 MCreps = 1000 # Number of Monte Carlo samples for each sample size
 TrainSize = 2048 # samples in each epoch
-N = [100, 200, 400]  # Sample sizes (most useful to incease by 4X)
+N = [100, 200, 400, 800, 1600, 3200]  # Sample sizes (most useful to incease by 4X)
 testseed = 782
 trainseed = 999
 transformseed = 1204
 
-#=
+
 # Estimation by ML
 # ------------------------------------------------------------------------------
 err_mle = zeros(3, MCreps, length(N))
@@ -37,7 +37,7 @@ end
 BSON.@save "err_mle.bson" err_mle
 BSON.@save "thetahat_mle.bson" thetahat_mle
 BSON.@save "thetatrue.bson" thetatrue
-=#
+
 BSON.@load "err_mle.bson" err_mle
 
 # NNet estimation (nnet object must be pre-trained!)
