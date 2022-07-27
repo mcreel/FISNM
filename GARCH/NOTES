@@ -1,0 +1,7 @@
+the code to generate results is in garch_estimate.jl
+the code to plot is in MakePlots.jl
+
+both use a string which appends current time to output, to allow experiments
+and to avoid overwriting good results. When something interesting is found,
+change the name to something descriptive. Or, work on git branch to keep 
+experiments separate.
