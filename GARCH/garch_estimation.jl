@@ -76,7 +76,7 @@ Threads.@threads for i = 1:size(N,1)
     Ŷ = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X])
     err_nnet[:, :, i] = Ŷ - Y
     thetahat_nnet[:,:,i] = Ŷ 
-    BSON.@save "err_nnet_$thisrun.bson" err_nnet
+    BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps TrainSize
     # Save model as BSON
     BSON.@save "models/nnet_(n-$n).bson" nnet
     println("Neural network, n = $n done.")
