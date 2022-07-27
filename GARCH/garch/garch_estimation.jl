@@ -1,9 +1,12 @@
+using Plots, Random, BSON, DelimitedFiles
 include("GarchLib.jl")
 include("neuralnets.jl")
 include("samin.jl")
-using Plots, Random, BSON, DelimitedFiles
+
 function main()
+thisrun = now()
 # General parameters
+
 MCreps = 1000 # Number of Monte Carlo samples for each sample size
 TrainSize = 2048 # samples in each epoch
 N = [100, 200, 400, 800, 1600, 3200]  # Sample sizes (most useful to incease by 4X)
@@ -11,7 +14,7 @@ testseed = 782
 trainseed = 999
 transformseed = 1204
 
-
+#=
 # Estimation by ML
 # ------------------------------------------------------------------------------
 err_mle = zeros(3, MCreps, length(N))
@@ -34,12 +37,10 @@ for (i, n) ∈ enumerate(N)
     end
     println("ML n = $n done.")
 end
-BSON.@save "err_mle.bson" err_mle
-BSON.@save "thetahat_mle.bson" thetahat_mle
-BSON.@save "thetatrue.bson" thetatrue
+BSON.@save "err_mle_$thisrun.bson" err_mle N MCreps TrainSize
+=#
 
-BSON.@load "err_mle.bson" err_mle
-
+#=
 # NNet estimation (nnet object must be pre-trained!)
 # ------------------------------------------------------------------------------
 # We standardize the outputs for the MSE to not be overly influenced by the
@@ -75,59 +76,12 @@ Threads.@threads for i = 1:size(N,1)
     Ŷ = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X])
     err_nnet[:, :, i] = Ŷ - Y
     thetahat_nnet[:,:,i] = Ŷ 
-
-    BSON.@save "err_nnet.bson" err_nnet
-    BSON.@save "thetahat_nnet.bson" thetahat_nnet
-
+    BSON.@save "err_nnet_$thisrun.bson" err_nnet
     # Save model as BSON
     BSON.@save "models/nnet_(n-$n).bson" nnet
     println("Neural network, n = $n done.")
 end
-
-# Plotting the results
-# ------------------------------------------------------------------------------
-k = size(err_mle, 1) # Number of parameters
-# Compute squared errors
-err_mle² = abs2.(err_mle);
-err_nnet² = abs2.(err_nnet);
-# Compute RMSE for each individual parameter
-rmse_mle = permutedims(reshape(sqrt.(mean(err_mle², dims=2)), k, length(N)));
-rmse_nnet = permutedims(reshape(sqrt.(mean(err_nnet², dims=2)), k, length(N)));
-# Compute RMSE aggregate
-rmse_mle_agg = mean(rmse_mle, dims=2);
-rmse_nnet_agg = mean(rmse_nnet, dims=2);
-
-plot(N, rmse_mle, xlab="Number of observations", ylab="RMSE", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (MLE)", ["ω" "β" "α"]),
-    col=first(palette(:tab10), k))
-plot!(N, rmse_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3)
-
-plot!(N, rmse_nnet, lw=2, ls=:dash, 
-    lab=map(x -> x * " (NNet)", ["ω" "β" "α"]),
-    col=first(palette(:tab10), k))
-plot!(N, rmse_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
-
-savefig("rmse_benchmark.png")
-
-# Compute bias for each individual parameter
-bias_mle = permutedims(reshape(mean(err_mle, dims=2), k, length(N)));
-bias_nnet = permutedims(reshape(mean(err_nnet, dims=2), k, length(N)));
-# Compute bias aggregate
-bias_mle_agg = mean(bias_mle, dims=2);
-bias_nnet_agg = mean(bias_nnet, dims=2);
-
-plot(N, bias_mle, xlab="Number of observations", ylab="Bias", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (MLE)", ["ω" "β" "α"]),
-    col=first(palette(:tab10), k))
-plot!(N, bias_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3)
-
-plot!(N, bias_nnet, lw=2, ls=:dash, 
-    lab=map(x -> x * " (NNet)", ["ω" "β" "α"]),
-    col=first(palette(:tab10), k))
-plot!(N, bias_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
-
-savefig("bias_benchmark.png")
-
+=#
 end
 main()
 
