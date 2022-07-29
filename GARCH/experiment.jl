@@ -4,16 +4,15 @@ include("neuralnets.jl")
 include("samin.jl")
 
 function main()
-thisrun = "EXP"
+thisrun = "warmup"
 # General parameters
 
-MCreps = 1000 # Number of Monte Carlo samples for each sample size
-TrainSize = 2048 # samples in each epoch
-N = [100, 200, 400, 800, 1600, 3200]  # Sample sizes (most useful to incease by 4X)
+MCreps = 500 # Number of Monte Carlo samples for each sample size
+TrainSize = 1024 # samples in each epoch
+N = [100, 200, 400, 800, 1600]  # Sample sizes (most useful to incease by 4X)
 testseed = 782
 trainseed = 999
 transformseed = 1204
-
 
 # Estimation by ML
 # ------------------------------------------------------------------------------
@@ -38,7 +37,6 @@ for (i, n) ∈ enumerate(N)
     println("ML n = $n done.")
 end
 BSON.@save "err_mle_$thisrun.bson" err_mle N MCreps TrainSize
-
 
 # NNet estimation (nnet object must be pre-trained!)
 # ------------------------------------------------------------------------------
@@ -70,13 +68,9 @@ Threads.@threads for i = 1:size(N,1)
     # Get NNet estimate of parameters for each sample
     Flux.testmode!(nnet) # In case nnet has dropout / batchnorm
     Flux.reset!(nnet)
-    #[nnet(x) for x ∈ X[1:end-1]] # Run network up to penultimate X
-    # Compute prediction and error
-    #Ŷ = StatsBase.reconstruct(dtY, nnet(X[end]))
-    # Alternative: this is averaging prediction at each observation in sample
-    Ŷ = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X])
+    nnet(X[1]) 
+    Ŷ = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X[2:end]])
     err_nnet[:, :, i] = Ŷ - Y
-    thetahat_nnet[:,:,i] = Ŷ 
     BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps TrainSize
     # Save model as BSON
     BSON.@save "models/nnet_(n-$n).bson" nnet

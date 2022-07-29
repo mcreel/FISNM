@@ -39,9 +39,9 @@ function train_rnn!(
             Xb, Yb = tabular2rnn(X[:, idx]), Y[:, idx]
             # Compute loss and gradients
             ∇ = gradient(θ) do
-                # Run model up to penultimate X
-                err = [Yb - m(x)  for x ∈ Xb]
-                sum(sum(err).^2.0)
+                # warm up
+                err = [abs2.(Yb - m(x))  for x ∈ Xb]
+                sum(sum(err[2:end])) # first dropped for warmup
             end
             Flux.update!(opt, θ, ∇) # Take gradient descent step
         end

@@ -1,10 +1,10 @@
-using Plots, Random, BSON, Dates
+using Plots, Random, BSON
 include("GarchLib.jl")
 include("neuralnets.jl")
 include("samin.jl")
 
 function main()
-thisrun = now()
+thisrun = "EXP"
 # General parameters
 
 MCreps = 1000 # Number of Monte Carlo samples for each sample size
@@ -14,7 +14,7 @@ testseed = 782
 trainseed = 999
 transformseed = 1204
 
-#=
+
 # Estimation by ML
 # ------------------------------------------------------------------------------
 err_mle = zeros(3, MCreps, length(N))
@@ -28,8 +28,8 @@ for (i, n) ∈ enumerate(N)
     Threads.@threads for s ∈ 1:MCreps
         θstart = Float64.([0.1, 0.5, 0.5])
         obj = θ -> -mean(garch11(θ, Float64.(X[:,s])))
-        lb = [0.001, 0.0, 0.0]
-        ub = [0.999, 0.99, 1.0]
+        lb = [0.0001, 0.0, 0.0]
+        ub = [1.0, 0.99, 1.0]
         θhat, junk, junk, junk= samin(obj, θstart, lb, ub, verbosity=0)
         err_mle[:, s, i] = θhat  .- Y[:, s] # Compute errors
         thetahat_mle[:,s,i] = θhat
@@ -38,9 +38,8 @@ for (i, n) ∈ enumerate(N)
     println("ML n = $n done.")
 end
 BSON.@save "err_mle_$thisrun.bson" err_mle N MCreps TrainSize
-=#
 
-#=
+
 # NNet estimation (nnet object must be pre-trained!)
 # ------------------------------------------------------------------------------
 # We standardize the outputs for the MSE to not be overly influenced by the
@@ -65,6 +64,8 @@ Threads.@threads for i = 1:size(N,1)
     # Compute network error on a new batch
     Random.seed!(testseed)
     X, Y = dgp(n, MCreps) # Generate data according to DGP
+    X = max.(X,Float32(-20.0))
+    X = min.(X,Float32(20.0))
     X = tabular2rnn(X) # Transform to rnn format
     # Get NNet estimate of parameters for each sample
     Flux.testmode!(nnet) # In case nnet has dropout / batchnorm
@@ -81,7 +82,7 @@ Threads.@threads for i = 1:size(N,1)
     BSON.@save "models/nnet_(n-$n).bson" nnet
     println("Neural network, n = $n done.")
 end
-=#
+
 end
 main()
 

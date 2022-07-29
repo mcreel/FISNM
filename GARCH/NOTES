@@ -1,3 +1,5 @@
+Current code in experiment.jl adds warmup to set state before using reuslts for obs 2:n
+
 the code to generate results is in garch_estimate.jl
 the code to plot is in MakePlots.jl
 
