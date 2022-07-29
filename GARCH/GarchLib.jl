@@ -9,12 +9,15 @@ function calibrate()
     f = fit(GARCH{1,1}, data;  meanspec=AR{1})
 end
 
-# draw the params from their priors, informed by fit to SP500. Draws are from uniform with mean equal to estimated parameters, and over +/- 5 sds.
+# draw the params from their priors. Model
+# is parameterized in terms of long run variance,
+# beta+alpha, and beta's share of beta+alpha
 function PriorDraw()
-    ω = 0.001 + 0.998*rand()
+    # long run variance
+    lrv = 0.0001 + 0.9999*rand()
     βplusα = 0.99*rand()
     share = rand()
-    [ω, βplusα, share]
+    [lrv, βplusα, share]
 end
 
 # get a set of draws from prior
@@ -35,34 +38,36 @@ end
     for s = 1:S
         # the parameter vector
         θ = PriorDraw()
-        ω, β_plus_α , share  = θ
-        β = share*β_plus_α 
-        α = (1.0 - share)*β_plus_α
+        lrv, βplusα , share  = θ
+        ω = (1.0 - βplusα)*lrv
+        β = share*βplusα
+        α = (1.0 - share)*βplusα
         # get y and x for the sample s
         y[:,s] = θ   
         x[:,s] = simulate(GARCH{1,1}([ω,β,α]), n;warmup=1000).data
     end
     x .-= mean(x)
+    x 
     Float32.(x), Float32.(y)
 end    
 
 # the likelihood function, alternative version with reparameterization
 @views function garch11(θ, y)
     # dissect the parameter vector
-    ω, β_plus_α , share  = θ
-    β = share*β_plus_α 
-    α = (1.0 - share)*β_plus_α
+    lrv, βplusα , share  = θ
+    ω = (1.0 - βplusα)*lrv
+    β = share*βplusα
+    α = (1.0 - share)*βplusα
     ylag = y[1:end-1]
     y = y[2:end]
     n = size(y,1)
     h = zeros(n)
     # initialize variance; either of these next two are reasonable choices
     #h[1] = var(y[1:10])
-    h[1] = var(y)
+    #h[1] = var(y)
+    h[1] = lrv
     for t = 2:n
         h[t] = ω + α*(y[t-1])^2. + β*h[t-1]
     end
     logL = -log(sqrt(2.0*pi)) .- 0.5*log.(h) .- 0.5*(y.^2.)./h
 end
-
-

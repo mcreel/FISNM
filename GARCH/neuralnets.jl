@@ -24,6 +24,8 @@ function train_rnn!(
     # Iterate over training epochs
     for epoch ∈ 1:epochs
         X, Y = dgp(n, S) # Generate a new batch
+        X = max.(X, Float32(-20.0))
+        X = min.(X, Float32(20.0))
         # Standardize targets for MSE scaling
         # no need to do this for every sample, use a high accuracy
         # transform from large draw from prior
@@ -38,9 +40,8 @@ function train_rnn!(
             # Compute loss and gradients
             ∇ = gradient(θ) do
                 # Run model up to penultimate X
-                [m(x) for x ∈ Xb[1:end-1]]
-                # Compute loss
-                loss(m(Xb[end]), Yb)
+                err = [Yb - m(x)  for x ∈ Xb]
+                sum(sum(err).^2.0)
             end
             Flux.update!(opt, θ, ∇) # Take gradient descent step
         end
