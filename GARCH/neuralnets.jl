@@ -16,8 +16,7 @@ lstm_net(n_hidden, dropout_rate) = Chain(
 # Trains a recurrent neural network
 function train_rnn!(
     m, opt, dgp, n, S, dtY; 
-    epochs=100, batchsize=32, dev=cpu, loss=rmse_loss
-)
+    epochs=100, batchsize=32, dev=cpu, loss=rmse_loss)
     Flux.trainmode!(m) # In case we have dropout / batchnorm
     m = dev(m) # Pass model to device (cpu/gpu)
     θ = Flux.params(m) # Extract parameters
@@ -41,8 +40,9 @@ function train_rnn!(
             # Compute loss and gradients
             ∇ = gradient(θ) do
                 # don't use first, to warm up state
-                err = [abs2.(Yb - m(x))  for x ∈ Xb]
-                sum(sum(err[2:end]))/n # first dropped for warmup
+                m(Xb[1])
+                err = [abs2.(Yb - m(x))  for x ∈ Xb[2:end]]
+                sum(sum(err))/n
             end
             Flux.update!(opt, θ, ∇) # Take gradient descent step
         end
