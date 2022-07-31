@@ -6,9 +6,9 @@ tabular2rnn(X) = [X[i:i, :] for i ∈ 1:size(X, 1)]
 rmse_loss(X, Y) = sqrt(mean(abs2.(X - Y)))
 lstm_net(n_hidden, dropout_rate) = Chain(
     Dense(1, n_hidden, tanh),
-    Dropout(dropout_rate),
+#    Dropout(dropout_rate),
     LSTM(n_hidden, n_hidden),
-    Dropout(dropout_rate),
+#    Dropout(dropout_rate),
     LSTM(n_hidden, n_hidden),
     Dense(n_hidden, 3)
 )
@@ -23,6 +23,7 @@ function train_rnn!(
     θ = Flux.params(m) # Extract parameters
     # Iterate over training epochs
     for epoch ∈ 1:epochs
+        println("epoch $epoch of $epochs")
         X, Y = dgp(n, S) # Generate a new batch
         X = max.(X, Float32(-20.0))
         X = min.(X, Float32(20.0))
@@ -39,9 +40,9 @@ function train_rnn!(
             Xb, Yb = tabular2rnn(X[:, idx]), Y[:, idx]
             # Compute loss and gradients
             ∇ = gradient(θ) do
-                # warm up
+                # don't use first, to warm up state
                 err = [abs2.(Yb - m(x))  for x ∈ Xb]
-                sum(sum(err[2:end])) # first dropped for warmup
+                sum(sum(err[2:end]))/n # first dropped for warmup
             end
             Flux.update!(opt, θ, ∇) # Take gradient descent step
         end

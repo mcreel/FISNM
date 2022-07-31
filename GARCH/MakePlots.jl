@@ -2,7 +2,7 @@ using BSON, Plots, Statistics
 
 function MakePlots(whichrun="base")
 # Plotting the results
-BSON.@load "err_mle_$whichrun.bson" err_mle N MCreps TrainSize
+BSON.@load "err_mle_$whichrun.bson" err_mle N
 BSON.@load "err_nnet_$whichrun.bson" err_nnet
 
 k = size(err_mle, 1) # Number of parameters
