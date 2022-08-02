@@ -1,4 +1,4 @@
-using ARCHModels, Distributions, DelimitedFiles, Statistics, Flux, CUDA, BSON
+using Distributions, DelimitedFiles, Statistics, Flux, CUDA, BSON
 
 # estimates GARCH with SP500 data, to get reasonable parameters
 # and standard errors.
@@ -43,13 +43,31 @@ end
         β = share*βplusα
         α = (1.0 - share)*βplusα
         # get y and x for the sample s
-        y[:,s] = θ   
-        x[:,s] = simulate(GARCH{1,1}([ω,β,α]), n;warmup=1000).data
+        y[:,s] = θ
+        x[:,s] = SimulateGarch11(θ, n)
     end
-    x .-= mean(x)
-    x 
     Float32.(x), Float32.(y)
 end    
+
+
+# the likelihood function, alternative version with reparameterization
+@views function SimulateGarch11(θ, n)
+    burnin = 1000
+    # dissect the parameter vector
+    lrv, βplusα , share  = θ
+    ω = (1.0 - βplusα)*lrv
+    β = share*βplusα
+    α = (1.0 - share)*βplusα
+    ys = zeros(n)
+    h = lrv
+    y = 0.
+    for t = 1:burnin + n
+        h = ω + α*y^2. + β*h
+        y = sqrt(h)*randn()
+        t > burnin ? ys[t-burnin] = y : nothing
+    end
+    ys
+end
 
 # the likelihood function, alternative version with reparameterization
 @views function garch11(θ, y)

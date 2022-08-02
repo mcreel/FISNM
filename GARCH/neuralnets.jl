@@ -24,8 +24,6 @@ function train_rnn!(
     for epoch ∈ 1:epochs
         println("epoch $epoch of $epochs")
         X, Y = dgp(n, S) # Generate a new batch
-        X = max.(X, Float32(-20.0))
-        X = min.(X, Float32(20.0))
         # Standardize targets for MSE scaling
         # no need to do this for every sample, use a high accuracy
         # transform from large draw from prior

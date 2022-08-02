@@ -18,12 +18,12 @@ rmse_nnet_agg = mean(rmse_nnet, dims=2);
 
 colors = palette(:default)[1:k]'
 plot(N, rmse_mle, xlab="Number of observations", ylab="RMSE", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (MLE)", ["ω" "β+α" "π"]),
+    lw=2, lab=map(x -> x * " (MLE)", ["lrv" "β+α" "π"]),
     color=colors)
 plot!(N, rmse_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3)
 
 plot!(N, rmse_nnet, lw=2, ls=:dash, 
-    lab=map(x -> x * " (NNet)", ["ω" "β+α" "π"]),
+    lab=map(x -> x * " (NNet)", ["lrv" "β+α" "π"]),
     color=colors)
 plot!(N, rmse_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 
@@ -37,12 +37,12 @@ bias_mle_agg = mean(bias_mle, dims=2);
 bias_nnet_agg = mean(bias_nnet, dims=2);
 
 plot(N, bias_mle, xlab="Number of observations", ylab="Bias", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (MLE)", ["ω" "β+α" "π"]),
+    lw=2, lab=map(x -> x * " (MLE)", ["lrv" "β+α" "π"]),
     color=colors)
 plot!(N, bias_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3)
 
 plot!(N, bias_nnet, lw=2, ls=:dash, 
-    lab=map(x -> x * " (NNet)", ["ω" "β+α" "π"]),
+    lab=map(x -> x * " (NNet)", ["lrv" "β+α" "π"]),
     color=colors)
 plot!(N, bias_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 

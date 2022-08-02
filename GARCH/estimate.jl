@@ -4,15 +4,15 @@ include("neuralnets.jl")
 include("samin.jl")
 
 function main()
-thisrun = "final?"
+thisrun = "working"
 # General parameters
 
 MCreps = 1000 # Number of Monte Carlo samples for each sample size
 TrainSize = 2048 # samples in each epoch
 epochs = 200
-N = [100, 200, 400, 800, 1600]  # Sample sizes (most useful to incease by 4X)
-testseed = 782
-trainseed = 999
+N = [100, 200, 400, 800, 1600, 3200]  # Sample sizes (most useful to incease by 4X)
+testseed = 77
+trainseed = 78
 transformseed = 1204
 
 
@@ -60,8 +60,6 @@ Threads.@threads for i = 1:size(N,1)
     # Compute network error on a new batch
     Random.seed!(testseed)
     X, Y = dgp(n, MCreps) # Generate data according to DGP
-    X = max.(X,Float32(-20.0))
-    X = min.(X,Float32(20.0))
     X = tabular2rnn(X) # Transform to rnn format
     # Get NNet estimate of parameters for each sample
     Flux.testmode!(nnet) # In case nnet has dropout / batchnorm
