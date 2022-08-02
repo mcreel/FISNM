@@ -25,7 +25,7 @@ for (i, n) ∈ enumerate(N)
     X, Y = dgp(n, MCreps) # Generate the data according to DGP
     # Fit GARCH models by ML on each sample and compute error
     Threads.@threads for s ∈ 1:MCreps
-        θstart = Float64.([0.1, 0.5, 0.5])
+        θstart = Float64.([0.5, 0.5, 0.5])
         obj = θ -> -mean(garch11(θ, Float64.(X[:,s])))
         lb = [0.0001, 0.0, 0.0]
         ub = [1.0, 0.99, 1.0]
