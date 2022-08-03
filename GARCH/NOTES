@@ -1,1 +1,7 @@
+estimate400 is for experimenting with net for
+n = 400
+
+copy400.jl does the estimation for different n, passing chunks for the sample though
+the n=400 net, and averaging the outputs.
+
 

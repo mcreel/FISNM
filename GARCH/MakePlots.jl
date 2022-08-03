@@ -1,6 +1,6 @@
 using BSON, Plots, Statistics
 
-function MakePlots(whichrun="base")
+function MakePlots(whichrun)
 # Plotting the results
 BSON.@load "err_mle_$whichrun.bson" err_mle N
 BSON.@load "err_nnet_$whichrun.bson" err_nnet
