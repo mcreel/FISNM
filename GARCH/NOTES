@@ -1,7 +1,7 @@
-estimate400 is for experimenting with net for
-n = 400
+to replicate:
 
-copy400.jl does the estimation for different n, passing chunks for the sample though
-the n=400 net, and averaging the outputs.
-
+* start Julia with julia --proj -t auto
+* include("estimate.jl")
+* include("MakePlots.jl")
+* MakePlots("working")
 

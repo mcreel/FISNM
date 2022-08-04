@@ -1,0 +1,7 @@
+to replicate:
+
+* start Julia with julia --proj -t auto
+* include("estimate.jl")
+* include("MakePlots.jl")
+* MakePlots("working")
+
