@@ -16,16 +16,16 @@ end
 # each column is a vector of regressors, plus the 0/1 outcome in last row
 @views function SimulateLogit(θ, n)
     k = size(θ,1)
-    data = randn(k+1,n)
-    data[k+1,:] = rand(1,n) .< 1.0 ./(1. .+ exp.(-θ'*data[1:k,:]))
-    data
+    x = randn(n,k)
+    y = rand(n) .< 1.0 ./(1. .+ exp.(-x*θ))
+    data = [x y]'
 end    
 
 function LogitLikelihood(θ, data)
-    x = data[1:end-1,:]
+    x = data[1:end-1,:]'
     y = data[end,:]
-    p = 1.0./(1.0 .+ exp.(-θ'*x))
-    y.*log.(p) .+ (log.(1.0 .- p)).*(1.0 .- y)
+    p = 1.0./(1.0 .+ exp.(-x*θ))
+    mean(y.*log.(p) .+ (log.(1.0 .- p)).*(1.0 .- y))
 end
 
 

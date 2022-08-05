@@ -18,12 +18,12 @@ rmse_nnet_agg = mean(rmse_nnet, dims=2);
 
 colors = palette(:default)[1:k]'
 plot(N, rmse_mle, xlab="Number of observations", ylab="RMSE", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (MLE)", ["lrv" "β+α" "π"]),
+    lw=2, lab=map(x -> x * " (MLE)", ["p1" "p1" "p3" "p4" "p5"]),
     color=colors)
 plot!(N, rmse_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3)
 
 plot!(N, rmse_nnet, lw=2, ls=:dash, 
-    lab=map(x -> x * " (NNet)", ["lrv" "β+α" "π"]),
+    lab=map(x -> x * " (NNet)", ["p1" "p2" "p2" "p4" "p5"]),
     color=colors)
 plot!(N, rmse_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 

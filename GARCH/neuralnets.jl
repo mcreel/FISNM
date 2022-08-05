@@ -4,11 +4,9 @@ using StatsBase
 # Some helpers
 tabular2rnn(X) = [X[i:i, :] for i ∈ 1:size(X, 1)]
 rmse_loss(X, Y) = sqrt(mean(abs2.(X - Y)))
-lstm_net(n_hidden, dropout_rate) = Chain(
+lstm_net(n_hidden) = Chain(
     Dense(1, n_hidden, tanh),
-#    Dropout(dropout_rate),
     LSTM(n_hidden, n_hidden),
-#    Dropout(dropout_rate),
     LSTM(n_hidden, n_hidden),
     Dense(n_hidden, 3)
 )

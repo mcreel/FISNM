@@ -45,8 +45,8 @@ dtY = fit(ZScoreTransform, PriorDraw(100000)) # use a large sample for this
 err_nnet = zeros(3, MCreps, length(N))
 Threads.@threads for i = 1:size(N,1)
     n = N[i]
-    # Create network with 32 hidden nodes and 20% dropout rate
-    nnet = lstm_net(32, .2)
+    # Create network with 32 hidden nodes
+    nnet = lstm_net(32)
     # Train network (it seems we can still improve by going over 200 epochs!)
     Random.seed!(trainseed) # use other seed this, to avoid sample contamination for NN training
     train_rnn!(nnet, AdaDelta(), dgp, n, TrainSize, dtY, epochs=epochs)
