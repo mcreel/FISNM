@@ -37,12 +37,12 @@ bias_mle_agg = mean(bias_mle, dims=2);
 bias_nnet_agg = mean(bias_nnet, dims=2);
 
 plot(N, bias_mle, xlab="Number of observations", ylab="Bias", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (MLE)", ["lrv" "β+α" "π"]),
+    lw=2, lab=map(x -> x * " (MLE)", ["p1" "p2" "p3" "p4" "p5"]),
     color=colors)
 plot!(N, bias_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3)
 
 plot!(N, bias_nnet, lw=2, ls=:dash, 
-    lab=map(x -> x * " (NNet)", ["lrv" "β+α" "π"]),
+    lab=map(x -> x * " (NNet)", ["p1" "p2" "p3" "p4" "p5"]),
     color=colors)
 plot!(N, bias_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 

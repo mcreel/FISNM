@@ -1,13 +1,13 @@
-using Flux
-using StatsBase
+using Flux, StatsBase
+using BSON:@save
+using BSON:@load
+
 
 # helpers
-lstm_net(n_hidden) = Chain(
-    Dense(6, n_hidden, leakyrelu),
-    LSTM(n_hidden, n_hidden),
-    LSTM(n_hidden, n_hidden),
-    Dense(n_hidden, n_hidden, hardtanh),
-    Dense(n_hidden, 5)
+lstm_net(n_hidden) = 
+Chain(
+      LSTM(4, n_hidden),
+      Dense(n_hidden, 3)
 )
 
 # Create batches of a time series
@@ -32,28 +32,42 @@ function batch_timeseries(X, s::Int, r::Int)
     end
 end
 
-
-# Trains a recurrent neural network
-function train_rnn!(
-    m, opt, dgp, n, S, dtY; 
-    epochs=100, batchsize=32, dev=cpu)
-    Flux.trainmode!(m) # In case we have dropout / batchnorm
-    m = dev(m) # Pass model to device (cpu/gpu)
-    θ = Flux.params(m) # Extract parameters
-    for r = 1:S
+function train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs, dtY)
+    # create test data
+    testsize = 1000
+    Xout, Yout  = dgp(n, testsize)
+    Xout = batch_timeseries(Xout, n, n)
+    StatsBase.transform!(dtY, Yout)
+    # initialize tracking 
+    bestsofar = 1.0e10
+    bestmodel = m
+    # train
+    θ = Flux.params(m)
+    for r = 1:datareps
         X, Y  = dgp(n, batchsize)
         X = batch_timeseries(X, n, n)
-        println("data loop $r  of $S") 
+        StatsBase.transform!(dtY, Y)
         for epoch ∈ 1:epochs
             Flux.reset!(m)
             ∇ = gradient(θ) do 
                 # don't use first, to warm up state
                 m(X[1])
-                err = [abs2.(Y - m(x))  for x ∈ X[2:end]]
-                sqrt(sum(sum(err))/n)
+                err = mean(sqrt.(mean([abs2.(Y - m(x))  for x ∈ X[2:end]])))
             end
-            Flux.update!(opt, θ, ∇) # Take gradient descent step
+            Flux.update!(opt, θ, ∇)
+        end
+        Flux.reset!(m)
+        m(Xout[1])
+        err = mean(sqrt.(mean([abs2.(Yout - m(x))  for x ∈ Xout[2:end]])))
+        current = mean(sqrt.(err)) # average RMSE over params
+        if current < bestsofar
+            bestsofar = current
+            BSON.@save "bestmodel_$n.bson" m
+            println("datarep: $r of $datareps")
+            println("current best: $current")
         end
     end
-    nothing
+    BSON.@load "bestmodel_$n.bson" m
 end
+
+
