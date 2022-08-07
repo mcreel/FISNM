@@ -23,7 +23,7 @@ end
 # each column is a vector of regressors, plus the 0/1 outcome in last row
 @views function SimulateLogit(θ, n)
     k = size(θ,1)
-    data = 2.0 .* rand(k+1,n) .- 1.0
+    data = randn(k+1,n)
     data[k+1,:] = rand(1,n) .< 1.0 ./(1. .+ exp.(-θ'*data[1:k,:]))
     data
 end    

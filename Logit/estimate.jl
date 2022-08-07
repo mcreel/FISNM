@@ -8,7 +8,7 @@ thisrun = "working"
 
 n_hidden = 16
 MCreps = 1000 # Number of Monte Carlo samples for each sample size
-datareps = 5000 # number of repetitions of drawing sample
+datareps = 3000 # number of repetitions of drawing sample
 batchsize = 100
 epochs = 10 # passes over each batch
 N = [50, 100, 150, 200]  # Sample sizes (most useful to incease by 4X)
@@ -51,20 +51,20 @@ Threads.@threads for i = 1:size(N,1)
     # Create network with 32 hidden nodes
     nnet = lstm_net(n_hidden)
     # Train network
-    opt = AdaGrad()
+    opt = ADAMW()
     train_rnn!(nnet, opt, dgp, n, datareps, batchsize, epochs, dtY)
     # Compute network error on a new batch
+    BSON.@load "bestmodel_$n.bson" m
     Random.seed!(testseed)
     X, Y = dgp(n, MCreps) # Generate data according to DGP
     X = batch_timeseries(X, n, n) # Transform to rnn format
     # Get NNet estimate of parameters for each sample
-    Flux.testmode!(nnet) # In case nnet has dropout / batchnorm
-    Flux.reset!(nnet)
-    nnet(X[1]) # warmup
-    Yhat = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X[2:end]])
+    Flux.testmode!(m) # In case nnet has dropout / batchnorm
+    Flux.reset!(m)
+    m(X[1]) # warmup
+    Yhat = [m(x) for x ∈ X[2:end]][end]
     err_nnet[:, :, i] = Y - Yhat
     # Save model as BSON
-    BSON.@save "models/nnet_(n-$n)_$thisrun.bson" nnet
     println("Neural network, n = $n done.")
 end
 BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps datareps epochs batchsize

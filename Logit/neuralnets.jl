@@ -2,7 +2,6 @@ using Flux, StatsBase
 using BSON:@save
 using BSON:@load
 
-
 # helpers
 lstm_net(n_hidden) = 
 Chain(
@@ -52,14 +51,15 @@ function train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs, dtY)
             ∇ = gradient(θ) do 
                 # don't use first, to warm up state
                 m(X[1])
-                err = mean(sqrt.(mean([abs2.(Y - m(x))  for x ∈ X[2:end]])))
+                pred = [m(x) for x ∈ X[2:end]][end]
+                mean(sqrt.(mean([abs2.(Y - pred)])))
             end
             Flux.update!(opt, θ, ∇)
         end
         Flux.reset!(m)
         m(Xout[1])
-        err = mean(sqrt.(mean([abs2.(Yout - m(x))  for x ∈ Xout[2:end]])))
-        current = mean(sqrt.(err)) # average RMSE over params
+        pred = [m(x) for x ∈ Xout[2:end]][end]
+        current = mean(sqrt.(mean([abs2.(Yout - pred)])))
         if current < bestsofar
             bestsofar = current
             BSON.@save "bestmodel_$n.bson" m
