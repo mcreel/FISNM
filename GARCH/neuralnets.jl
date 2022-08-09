@@ -5,7 +5,7 @@ using StatsBase
 tabular2rnn(X) = [view(X, i:i, :) for i ∈ 1:size(X, 1)]
 
 # In the following losses, Ŷ is always the sequence of predictions
-# RMSE on last item
+# RMSE on last item only
 rmse_loss(Ŷ, Y) = sqrt(mean(abs2.(Ŷ[end] - Y)))
 # MSE on full sequence predicton
 mse_full(Ŷ, Y) = sum(mean(abs2.(ŷᵢ - Y) for ŷᵢ ∈ Ŷ))
@@ -74,11 +74,13 @@ lstm_net(n_hidden, dev=cpu) =
 bilstm_net(n_hidden, dev=cpu) = 
     build_bidirectional_net(hidden_nodes=n_hidden, add_dropout=False, dev=dev)   
 
+# ------------------------------------------------------------------------------------------
+
 # Trains a recurrent neural network
 function train_rnn!(
     m, opt, dgp, n, S, dtY; 
     epochs=100, batchsize=32, dev=cpu, loss=mse_full,
-    validation_loss=true, verbosity=1
+    validation_loss=true, verbosity=1, bidirectional=false
 )
     Flux.trainmode!(m) # In case we have dropout / batchnorm
     θ = Flux.params(m) # Extract parameters
@@ -105,23 +107,36 @@ function train_rnn!(
             # Extract batch, transform features to format for RNN
             Xb, Yb = tabular2rnn(X[:, idx]), Y[:, idx]
             # Compute loss and gradients
-            ∇ = gradient(θ) do
-                m(Xb[1]) # don't use first, to warm up state
-                Ŷ = [m(x) for x ∈ Xb[2:end]]
-                loss(Ŷ, Yb)
+            if bidirectional # Special case for bidirectional RNN
+                ∇ = gradient(θ) do
+                    Ŷ = [m(Xb)]
+                    loss(Ŷ, Yb)
+                end
+                Flux.update!(opt, θ, ∇) # Take gradient descent step
+            else
+                ∇ = gradient(θ) do
+                    m(Xb[1]) # don't use first, to warm up state
+                    Ŷ = [m(x) for x ∈ Xb[2:end]]
+                    loss(Ŷ, Yb)
+                end
+                Flux.update!(opt, θ, ∇) # Take gradient descent step
             end
-            Flux.update!(opt, θ, ∇) # Take gradient descent step
         end
 
         # Compute validation loss and print status if verbose
         if validation_loss
             Flux.reset!(m)
             Flux.testmode!(m)
-            m(Xv[1]) # Warm up state on first observation
-            Ŷ = [m(x) for x ∈ Xv[2:end]]
-            losses[epoch] = loss(Ŷ, Yv)
+            if bidirectional # Special case for bidirectional RNN
+                Ŷ = [m(Xv)]
+            else
+                m(Xv[1]) # Warm up state on first observation
+                Ŷ = [m(x) for x ∈ Xv[2:end]]
+            end
+            current_loss = loss(Ŷ, Yv)
+            losses[epoch] = current_loss
             Flux.trainmode!(m)
-            epochs % verbosity == 0 && @info "$epoch / $epochs" losses[epoch]
+            epochs % verbosity == 0 && @info "$epoch / $epochs" current_loss
         else
             epochs % verbosity == 0 && @info "$epoch / $epochs"
         end
