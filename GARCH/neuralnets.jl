@@ -8,7 +8,8 @@ rmse_loss(Ŷ, Y) = sqrt(mean(abs2.(Ŷ - Y)))
 # Create a neural network according to chosen specification
 function build_net(;
     input_nodes=1, output_nodes=3, hidden_nodes=32, dropout_rate=.2, 
-    hidden_layers=2, rnn_cell=Flux.LSTM, activation=tanh, add_dropout=true
+    hidden_layers=2, rnn_cell=Flux.LSTM, activation=tanh, add_dropout=true,
+    dev=cpu
 )
     # Input layer
     layers = Any[Dense(input_nodes => hidden_nodes, activation)] 
@@ -19,7 +20,7 @@ function build_net(;
     end
     # Output layer
     push!(layers, Dense(hidden_nodes => output_nodes))
-    Chain(layers...)
+    Chain(layers...) |> dev
 end
 
 # Bidirectional RNN, see:
@@ -42,7 +43,8 @@ end
 # Create a Bidirectional RNN
 function build_bidirectional_net(;
     input_nodes=1, output_nodes=3, hidden_nodes=32, dropout_rate=.2, 
-    hidden_layers=2, rnn_cell=Flux.LSTM, activation=tanh, add_dropout=true
+    hidden_layers=2, rnn_cell=Flux.LSTM, activation=tanh, add_dropout=true,
+    dev=cpu
 )
     # Encoder / input layer
     enc = Dense(input_nodes => hidden_nodes, activation)
@@ -57,20 +59,20 @@ function build_bidirectional_net(;
     # Output layer
     out = Dense(2hidden_nodes => output_nodes)
     # Bidirectional RNN
-    BiRNN(enc, rnn₁, rnn₂, out)
+    BiRNN(enc, rnn₁, rnn₂, out) |> dev
 end
 
 # Alias for LSTM and BiLSTM net construction
-lstm_net(n_hidden) = build_net(hidden_nodes=n_hidden, add_dropout=false)
-bilstm_net(n_hidden) = build_bidirectional_net(hidden_nodes=n_hidden, 
-    add_dropout=False)   
+lstm_net(n_hidden, dev=cpu) = 
+    build_net(hidden_nodes=n_hidden, add_dropout=false, dev=dev)
+bilstm_net(n_hidden, dev=cpu) = 
+    build_bidirectional_net(hidden_nodes=n_hidden, add_dropout=False, dev=dev)   
 
 # Trains a recurrent neural network
 function train_rnn!(
     m, opt, dgp, n, S, dtY; 
     epochs=100, batchsize=32, dev=cpu, loss=rmse_loss
 )
-    m = dev(m) # Pass model to device (cpu/gpu)
     Flux.trainmode!(m) # In case we have dropout / batchnorm
     θ = Flux.params(m) # Extract parameters
 
