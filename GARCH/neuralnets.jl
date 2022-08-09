@@ -136,9 +136,9 @@ function train_rnn!(
             current_loss = loss(Ŷ, Yv)
             losses[epoch] = current_loss
             Flux.trainmode!(m)
-            epochs % verbosity == 0 && @info "$epoch / $epochs" current_loss
+            epoch % verbosity == 0 && @info "$epoch / $epochs" current_loss
         else
-            epochs % verbosity == 0 && @info "$epoch / $epochs"
+            epoch % verbosity == 0 && @info "$epoch / $epochs"
         end
     end
     # Return losses if tracked
@@ -147,11 +147,4 @@ function train_rnn!(
     else
         nothing
     end
-end
-
-# Trains a bidirectional neural network
-function train_birnn!(
-
-)
-
 end
