@@ -33,18 +33,10 @@ end
 # x: 1 X S*n vector of data from EGARCH model
 # y: 3 X S*n vector of parameters used to generate each sample
 @views function dgp(n, S)
-    y = zeros(3, S)     # the parameters for each sample
-    x = zeros(n, S)    # the Garch data for each sample
+    y = PriorDraw(S)     # the parameters for each sample
+    x = zeros(1, n*S)    # the Garch data for each sample
     for s = 1:S
-        # the parameter vector
-        θ = PriorDraw()
-        lrv, βplusα , share  = θ
-        ω = (1.0 - βplusα)*lrv
-        β = share*βplusα
-        α = (1.0 - share)*βplusα
-        # get y and x for the sample s
-        y[:,s] = θ
-        x[:,s] = SimulateGarch11(θ, n)
+        x[:,n*s-n+1:s*n] = SimulateGarch11(y[:,s], n)
     end
     Float32.(x), Float32.(y)
 end    
@@ -66,7 +58,7 @@ end
         y = sqrt(h)*randn()
         t > burnin ? ys[t-burnin] = y : nothing
     end
-    ys
+    ys'
 end
 
 # the likelihood function, alternative version with reparameterization

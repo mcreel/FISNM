@@ -4,20 +4,24 @@ include("neuralnets.jl")
 include("samin.jl")
 
 function main()
-thisrun = "working"
+thisrun = "experiment"
 # General parameters
-
+k = 3 # number of labels
+g = 1 # number of features
+n_hidden = 16
 MCreps = 1000 # Number of Monte Carlo samples for each sample size
-TrainSize = 2048 # samples in each epoch
-epochs = 200
-N = [100, 200, 400, 800, 1600, 3200]  # Sample sizes (most useful to incease by 4X)
+datareps = 1000 # 3000 # number of repetitions of drawing sample
+batchsize = 50
+epochs = 10 # passes over each batch
+N = [100, 200, 400, 800]  # Sample sizes (most useful to incease by 4X)
 testseed = 77
 trainseed = 78
 transformseed = 1204
 
+#=
 # Estimation by ML
 # -----------------------------------------------
-err_mle = zeros(3, MCreps, length(N))
+err_mle = zeros(k, MCreps, length(N))
 # Iterate over different lengths of observed returns
 for (i, n) ∈ enumerate(N) 
     Random.seed!(testseed) # samples for ML and for NN use same seed
@@ -34,38 +38,35 @@ for (i, n) ∈ enumerate(N)
     println("ML n = $n done.")
 end
 BSON.@save "err_mle_$thisrun.bson" err_mle N
-
-
+=#
 # -----------------------------------------------
 # NNet estimation (nnet object must be pre-trained!)
 Random.seed!(transformseed) # avoid sample contamination for NN training
 dtY = fit(ZScoreTransform, PriorDraw(100000)) # use a large sample for this
 
 # Iterate over different lengths of observed returns
-err_nnet = zeros(3, MCreps, length(N))
+err_nnet = zeros(k, MCreps, length(N))
 Threads.@threads for i = 1:size(N,1)
     n = N[i]
-    # Create network with 32 hidden nodes
-    nnet = lstm_net(32)
-    # Train network (it seems we can still improve by going over 200 epochs!)
-    Random.seed!(trainseed) # use other seed this, to avoid sample contamination for NN training
-    train_rnn!(nnet, AdaDelta(), dgp, n, TrainSize, dtY, epochs=epochs)
+    nnet = lstm_net(n_hidden, k, g)
+    # Train network
+    opt = ADAM()
+    train_rnn!(nnet, opt, dgp, n, datareps, batchsize, epochs, dtY)
     # Compute network error on a new batch
+    BSON.@load "bestmodel_$n.bson" m
     Random.seed!(testseed)
     X, Y = dgp(n, MCreps) # Generate data according to DGP
-    X = tabular2rnn(X) # Transform to rnn format
+    X = batch_timeseries(X, n, n) # Transform to rnn format
     # Get NNet estimate of parameters for each sample
-    Flux.testmode!(nnet) # In case nnet has dropout / batchnorm
-    Flux.reset!(nnet)
-    nnet(X[1]) # warmup
-    Yhat = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X[2:end]])
+    Flux.testmode!(m) # In case nnet has dropout / batchnorm
+    Flux.reset!(m)
+    m(X[1]) # warmup
+    Yhat = StatsBase.reconstruct(dtY, mean([m(x) for x ∈ X[2:end]]))
     err_nnet[:, :, i] = Y - Yhat
     # Save model as BSON
-    BSON.@save "models/nnet_(n-$n)_$thisrun.bson" nnet
     println("Neural network, n = $n done.")
 end
-BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps TrainSize epochs
-
+BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps datareps epochs
 end
 main()
 

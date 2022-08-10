@@ -2,11 +2,13 @@ using Flux, StatsBase
 using BSON:@save
 using BSON:@load
 
-# helpers
-lstm_net(n_hidden) = 
+#helpers
+tabular2rnn(X) = [X[i:i, :] for i ∈ 1:size(X, 1)]
+
+lstm_net(n_hidden, k, g) = 
 Chain(
-      LSTM(4, n_hidden),
-      Dense(n_hidden, 3)
+      LSTM(g, n_hidden),
+      Dense(n_hidden, k)
 )
 
 # Create batches of a time series
@@ -32,12 +34,12 @@ function batch_timeseries(X, s::Int, r::Int)
 end
 
 function train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs, dtY)
+    # size to test data sets
+    testsize = 5000
     # create test data
-    testsize = 1000
     Xout, Yout  = dgp(n, testsize)
     Xout = batch_timeseries(Xout, n, n)
-    StatsBase.transform!(dtY, Yout)
-    # initialize tracking 
+    #initialize tracking 
     bestsofar = 1.0e10
     bestmodel = m
     # train
@@ -45,29 +47,32 @@ function train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs, dtY)
     for r = 1:datareps
         X, Y  = dgp(n, batchsize)
         X = batch_timeseries(X, n, n)
+        # scale the labels for computing gradients
         StatsBase.transform!(dtY, Y)
         for epoch ∈ 1:epochs
             Flux.reset!(m)
             ∇ = gradient(θ) do 
                 # don't use first, to warm up state
                 m(X[1])
-                pred = [m(x) for x ∈ X[2:end]][end]
+                pred = mean([m(x) for x ∈ X[2:end]])
                 mean(sqrt.(mean([abs2.(Y - pred)])))
             end
             Flux.update!(opt, θ, ∇)
         end
-        Flux.reset!(m)
-        m(Xout[1])
-        pred = [m(x) for x ∈ Xout[2:end]][end]
-        current = mean(sqrt.(mean([abs2.(Yout - pred)])))
-        if current < bestsofar
-            bestsofar = current
-            BSON.@save "bestmodel_$n.bson" m
-            println("datarep: $r of $datareps")
-            println("current best: $current")
-        end
+        # periodically check fit to test set (unscaled labels)
+        # and save model if good enough improvement
+        if mod(r,10) == 0
+            Flux.reset!(m)
+            m(Xout[1])
+            pred = StatsBase.reconstruct(dtY, mean([m(x) for x ∈ Xout[2:end]]))
+            current = mean(sqrt.(mean([abs2.(Yout - pred)])))
+            if current < bestsofar
+                bestsofar = current
+                BSON.@save "bestmodel_$n.bson" m
+                println("datarep: $r of $datareps")
+                println("current best: $current")
+            end
+        end    
     end
     BSON.@load "bestmodel_$n.bson" m
 end
-
-
