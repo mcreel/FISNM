@@ -27,7 +27,7 @@ plot!(N, rmse_nnet, lw=2, ls=:dash,
     color=colors)
 plot!(N, rmse_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 
-savefig("rmse_benchmark_$whichrun.png")
+savefig("plots/rmse_benchmark_$whichrun.png")
 
 # Compute bias for each individual parameter
 bias_mle = permutedims(reshape(mean(err_mle, dims=2), k, length(N)));
@@ -46,5 +46,5 @@ plot!(N, bias_nnet, lw=2, ls=:dash,
     color=colors)
 plot!(N, bias_nnet_agg, lab="Aggregate (NNet)", c=:black, lw=3, ls=:dash)
 
-savefig("bias_benchmark_$whichrun.png")
+savefig("plots/bias_benchmark_$whichrun.png")
 end

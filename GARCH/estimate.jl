@@ -1,10 +1,13 @@
+using Pkg
+Pkg.activate(".")
 using Plots, Random, BSON
+cd("GARCH")
 include("GarchLib.jl")
 include("neuralnets.jl")
 include("samin.jl")
 
 function main()
-thisrun = "working"
+thisrun = "0810"
 # General parameters
 
 MCreps = 1000 # Number of Monte Carlo samples for each sample size
@@ -44,7 +47,7 @@ dtY = fit(ZScoreTransform, dev(PriorDraw(100_000))) # use a large sample for thi
 
 # Iterate over different lengths of observed returns
 err_nnet = zeros(3, MCreps, length(N))
-Threads.@threads for i = 1:size(N,1)
+for i = 1:size(N,1)
     n = N[i]
     # Create network with 32 hidden nodes
     nnet = lstm_net(32, dev)
@@ -60,8 +63,8 @@ Threads.@threads for i = 1:size(N,1)
     Flux.testmode!(nnet) # In case nnet has dropout / batchnorm
     Flux.reset!(nnet)
     nnet(X[1]) # warmup
-    Yhat = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X[2:end]])
-    err_nnet[:, :, i] = Y - Yhat
+    Yhat = mean(StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X[2:end])
+    err_nnet[:, :, i] = cpu(Y - Yhat)
     # Save model as BSON
     BSON.@save "models/nnet_(n-$n)_$thisrun.bson" nnet
     println("Neural network, n = $n done.")
@@ -75,7 +78,7 @@ dtY = fit(ZScoreTransform, dev(PriorDraw(100_000))) # use a large sample for thi
 
 # Iterate over different lengths of observed returns
 err_bnnet = zeros(3, MCreps, length(N))
-Threads.@threads for i = 1:size(N,1)
+for i = 1:size(N,1)
     n = N[i]
     # Create bidirectional network with 32 hidden nodes
     bnnet = bilstm_net(32, dev)
@@ -92,7 +95,7 @@ Threads.@threads for i = 1:size(N,1)
     Flux.reset!(bnnet)
      # warmup
     Yhat = StatsBase.reconstruct(dtY, bnnet(X))
-    err_bnnet[:, :, i] = Y - Yhat
+    err_bnnet[:, :, i] = cpu(Y - Yhat)
     # Save model as BSON
     BSON.@save "models/bnnet_(n-$n)_$thisrun.bson" bnnet
     println("Bidirectional neural network, n = $n done.")
