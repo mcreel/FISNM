@@ -3,12 +3,15 @@ using StatsBase
 
 # Some helpers
 tabular2rnn(X) = [view(X, i:i, :) for i ∈ 1:size(X, 1)]
+tabular2conv(X) = permutedims(reshape(X, size(X)..., 1, 1), (4, 1, 3, 2))
 
 # In the following losses, Ŷ is always the sequence of predictions
 # RMSE on last item only
 rmse_loss(Ŷ, Y) = sqrt(mean(abs2.(Ŷ[end] - Y)))
+rmse_conv(Ŷ, Y) = sqrt(mean(abs2, Ŷ - Y))
 # MSE on full sequence predicton
 mse_full(Ŷ, Y) = sum(mean(abs2.(ŷᵢ - Y) for ŷᵢ ∈ Ŷ))
+mse_conv(Ŷ, Y ) = sum(abs2, Ŷ - Y)
 # ------------------------------------------------------------------------------------------
 
 # Create a neural network according to chosen specification
@@ -133,6 +136,66 @@ function train_rnn!(
                 m(Xv[1]) # Warm up state on first observation
                 Ŷ = [m(x) for x ∈ Xv[2:end]]
             end
+            current_loss = loss(Ŷ, Yv)
+            losses[epoch] = current_loss
+            Flux.trainmode!(m)
+            epoch % verbosity == 0 && @info "$epoch / $epochs" current_loss
+        else
+            epoch % verbosity == 0 && @info "$epoch / $epochs"
+        end
+    end
+    # Return losses if tracked
+    if validation_loss
+        losses
+    else
+        nothing
+    end
+end
+
+# Train a convolutional neural network
+function train_cnn!(
+    m, opt, dgp, n, S, dtY;
+    epochs=100, batchsize=32, dev=cpu, loss=mse_conv,
+    validation_loss=true, verbosity=1
+)
+    Flux.trainmode!(m) # In case we have dropout / batchnorm
+    θ = Flux.params(m) # Extract parameters
+
+    # Create a validation set to compute and keep track of losses
+    if validation_loss
+        Xv, Yv = map(dev, dgp(n, S))
+        StatsBase.transform!(dtY, Yv)
+        Xv = tabular2conv(Xv)
+        losses = zeros(epochs)
+    end
+
+    # Iterate over training epochs
+    for epoch ∈ 1:epochs
+        X, Y = map(dev, dgp(n, S)) # Generate a new batch
+        # Standardize targets for MSE scaling
+        # no need to do this for every sample, use a high accuracy
+        # transform from large draw from prior
+        StatsBase.transform!(dtY, Y)
+        # Transform features to format for CNN
+        X = tabular2conv(X)
+        # ----- Minibatch training ---------------------------------------------
+        for idx ∈ Iterators.partition(1:S, batchsize)
+            Flux.reset!(m)
+            # Extract batch, transform features to format for RNN
+            Xb, Yb = X[:, :, :, idx], Y[:, idx]
+            # Compute loss and gradients
+            ∇ = gradient(θ) do
+                Ŷ = m(Xb)
+                loss(Ŷ, Yb)
+            end
+            Flux.update!(opt, θ, ∇) # Take gradient descent step
+        end
+
+        # Compute validation loss and print status if verbose
+        if validation_loss
+            Flux.reset!(m)
+            Flux.testmode!(m)
+            Ŷ = m(Xv)
             current_loss = loss(Ŷ, Yv)
             losses[epoch] = current_loss
             Flux.trainmode!(m)
