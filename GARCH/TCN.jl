@@ -13,16 +13,16 @@
 function TemporalBlock(
     chan_in::Int, chan_out::Int; 
     dilation::Int, kernel_size::Int, dropout_rate::AbstractFloat = 0.2,
-    residual::Bool = true
+    residual::Bool = true, pad = SamePad()
 )
     # Causal convolutions
     causal_conv = Chain(
         Conv((1, kernel_size), chan_in => chan_out, dilation = dilation, 
-            pad = SamePad()),
+            pad = pad),
         BatchNorm(chan_out, relu),
         Dropout(dropout_rate),
         Conv((1, kernel_size), chan_out => chan_out, dilation = dilation, 
-            pad = SamePad()),
+            pad = pad),
         BatchNorm(chan_out, relu),
         Dropout(dropout_rate)
     )
@@ -44,9 +44,19 @@ end
 function TCN(
     channels::AbstractVector{Int}; 
     kernel_size::Int, dilation_factor::Int = 2, 
-    dropout_rate::AbstractFloat = 0.2, residual::Bool = true
+    dropout_rate::AbstractFloat = 0.2, residual::Bool = true, pad = SamePad()
 )
     Chain([TemporalBlock(chan_in, chan_out, dilation = dilation_factor ^ (i - 1), 
-        kernel_size = kernel_size, dropout_rate = dropout_rate, residual = residual) 
+        kernel_size = kernel_size, dropout_rate = dropout_rate, residual = residual,
+        pad = pad) 
         for (i, (chan_in, chan_out)) ∈ enumerate(zip(channels[1:end-1], channels[2:end]))]...)
 end
+
+# Computes the receptive field size for a specified dilation, kernel size, and number of layers
+receptive_field_size(dilation::Int, kernel_size::Int, layers::Int) = 
+    1 + (kernel_size - 1) * (dilation ^ layers - 1) / (dilation - 1)
+
+# Minimum number of layers necessary to achieve a specified receptive field size
+# (take ceil(Int, necessary_layers(...)) for final number of layers)
+necessary_layers(dilation::Int, kernel_size::Int, receptive_field::Int) =
+    log(dilation, (receptive_field - 1) * (dilation - 1) / (kernel_size - 1)) + 1

@@ -22,6 +22,13 @@ trainseed = 78
 transformseed = 1204
 dev = gpu
 
+# TCN parameters
+dilation = 2
+kernel_size = 8
+channels = 2
+layers = [ceil(Int, necessary_layers(dilation, kernel_size, n)) for n ∈ N]
+tcn_epochs = 5_000
+
 Random.seed!(transformseed) # avoid sample contamination for NN training
 dtY = fit(ZScoreTransform, dev(PriorDraw(100_000))) # use a large sample for this
 
@@ -32,10 +39,12 @@ dtY = fit(ZScoreTransform, dev(PriorDraw(100_000))) # use a large sample for thi
 err_tcn = zeros(3, MCreps, length(N))
 for i = 1:size(N,1)
     n = N[i]
-    # Create bidirectional network with 32 hidden nodes
+    n_layers = layers[i]
+    # Create TCN
     tcn = dev(
         Chain(
-            TCN([1, 2, 2, 2, 2, 1], kernel_size=12, dropout_rate=0.0), 
+            TCN(vcat(1, [channels for _ ∈ 1:n_layers], 1), kernel_size=kernel_size, 
+                dropout_rate=0.0, dilation_factor=dilation), 
             Conv((1, 10), 1 => 1, stride = 10),
             Flux.flatten,
             Dense(n ÷ 10 => 3)
@@ -43,7 +52,7 @@ for i = 1:size(N,1)
     )
     # Train network (use 40x the epochs for TCN as it is extremely fast to train)
     Random.seed!(trainseed) # use other seed this, to avoid sample contamination for NN training
-    train_cnn!(tcn, AdaDelta(), dgp, n, TrainSize, dtY, epochs=10, dev=dev, 
+    train_cnn!(tcn, ADAM(), dgp, n, TrainSize, dtY, epochs=tcn_epochs, dev=dev, 
         validation_loss=false, verbosity=100)
     
     # Compute network error on a new batch
@@ -137,7 +146,7 @@ for (i, n) ∈ enumerate(N)
     end
     println("ML n = $n done.")
 end
-BSON.@save "err_mle_$thisrun.bson" err_mle Y N
+BSON.@save "err_mle_$thisrun.bson" err_mle N
 
 end
 main()
