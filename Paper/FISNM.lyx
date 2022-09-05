@@ -1,0 +1,686 @@
+#LyX 2.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 544
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\begin_preamble
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{dcolumn}
+%\usepackage[ps2pdf,pdftitle={Econometrics},urlcolor=blue,linktocpage,a4paper,colorlinks=true]{hyperref}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{setspace}
+%
+\definecolor{hellgelb}{rgb}{1,1,0.8}
+\definecolor{colKeys}{rgb}{0,0,1}
+\definecolor{colIdentifier}{rgb}{0,0,0}
+\definecolor{colComments}{rgb}{1,0,0}
+\definecolor{colString}{rgb}{0,0.5,0}
+\hypersetup{urlcolor=blue}
+
+\lstset{%
+   morekeywords={AND,ASC,avg,CHECK,COMMIT,count,DECODE,DESC,DISTINCT,%
+                 GROUP,IN,LIKE,NUMBER,ROLLBACK,SUBSTR,sum,VARCHAR2}%
+}
+\lstset{%
+    float=hbp,%
+    basicstyle=\ttfamily\small, %
+    identifierstyle=\color{colIdentifier}, %
+    keywordstyle=\color{colKeys}, %
+    stringstyle=\color{colString}, %
+    commentstyle=\color{colComments}, %
+    columns=flexible, %
+    tabsize=2, %
+    frame=single, %
+    extendedchars=true, %
+    showspaces=false, %
+    showstringspaces=false, %
+    numbers=left, %
+    numberstyle=\tiny, %
+    breaklines=true, %
+    backgroundcolor=\color{hellgelb}, %
+    breakautoindent=true, %
+    captionpos=b%
+}
+\end_preamble
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format default
+\output_sync 1
+\bibtex_command default
+\index_command default
+\paperfontsize 11
+\spacing onehalf
+\use_hyperref true
+\pdf_bookmarks true
+\pdf_bookmarksnumbered false
+\pdf_bookmarksopen false
+\pdf_bookmarksopenlevel 1
+\pdf_breaklinks false
+\pdf_pdfborder true
+\pdf_colorlinks true
+\pdf_backref false
+\pdf_pdfusetitle true
+\pdf_quoted_options "allcolors=blue"
+\papersize default
+\use_geometry true
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine biblatex
+\cite_engine_type authoryear
+\biblio_style plain
+\biblatex_bibstyle authoryear
+\biblatex_citestyle authoryear
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\use_minted 0
+\boxbgcolor #aaffff
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\leftmargin 3cm
+\topmargin 3cm
+\rightmargin 3cm
+\bottommargin 3cm
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Neural Networks for Efficient Estimation of Parameters of Econometric Models
+\end_layout
+
+\begin_layout Author
+Jonathan Chassot
+\begin_inset Foot
+status collapsed
+
+\begin_layout Plain Layout
+Faculty of Mathematics and Statistics, University of St.
+ Gallen , Switzerland
+\end_layout
+
+\end_inset
+
+ and Michael Creel
+\begin_inset Foot
+status collapsed
+
+\begin_layout Plain Layout
+Universitat Autònoma de Barcelona, Barcelona School of Economics, and MOVE,
+ Bellaterra (Barcelona) 08193, Spain.
+ michael.creel@uab.cat.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Abstract
+Using LSTM ...
+\end_layout
+
+\begin_layout Abstract
+
+\series bold
+Keywords: 
+\series default
+neural networks; ....
+\begin_inset Newline newline
+\end_inset
+
+
+\series bold
+JEL codes: 
+\series default
+C??
+\begin_inset Newpage newpage
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Introduction
+\end_layout
+
+\begin_layout Standard
+The method of simulated moments (MSM, 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "McFadden1989MSM"
+literal "false"
+
+\end_inset
+
+) is based on moment conditions of the form 
+\begin_inset Formula $m_{n}(\theta)=Z_{n}-\frac{1}{S}\sum_{s}Z_{n}^{s}(\theta)$
+\end_inset
+
+, where 
+\begin_inset Formula $Z_{n}$
+\end_inset
+
+is a vector of statistics formed of functions of the sample data, and 
+\begin_inset Formula $Z_{n}^{s}(\theta)$
+\end_inset
+
+ is the same statistic, but computed using data that is simulated from the
+ model at the parameter value 
+\begin_inset Formula $\theta$
+\end_inset
+
+.
+ The MSM estimator is the minimizer of 
+\begin_inset Formula $s_{n}(\theta)=m_{n}^{\prime}(\theta)W_{n}m_{n}(\theta)$
+\end_inset
+
+, which is the square of the weighted distance between 
+\begin_inset Formula $Z_{n}$
+\end_inset
+
+ and the average of the simulated statistics.
+ Approximate Bayesian Computing (ABC, a recent survey is 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "grazian2020review"
+literal "false"
+
+\end_inset
+
+) also relies on simulated statistics and measures of distance from the
+ sample statistics.
+ Here, we focus on the MSM perspective, but the ideas also have relevance
+ for the ABC literature.
+ For both of these literatures, an important question is how to choose the
+ statistics 
+\begin_inset Formula $Z_{n}$
+\end_inset
+
+ upon which to base estimation.
+\end_layout
+
+\begin_layout Standard
+This question has been approached from at least two perspectives.
+ A first is to devise methods for selecting the informative statistics from
+ a set of ad hoc statistics, such as sample means, variances, covariances,
+ autocovariances, and so forth.
+ References include ...., A potential weakness of this approach is that the
+ initial set of statistics may not be, as a whole, highly informative or
+ identifying, so even if.
+ Mention my papers, among other, as examples.
+ and as survey is given in Section 4 of Hall 2015.
+ 
+\end_layout
+
+\begin_layout Standard
+A second is to use statistics which are based on an auxiliary model that
+ is thought to well capture the features of the actual model.
+ Examples of this approach are indirect inference (II, 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "smith1993estimating"
+literal "false"
+
+\end_inset
+
+, 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "GourierouxMonfortIndirect"
+literal "false"
+
+\end_inset
+
+) and the efficient method of moments (EMM, 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "emm"
+literal "false"
+
+\end_inset
+
+).
+ For indirect inference, 
+\begin_inset Formula $Z_{n}$
+\end_inset
+
+ is the estimated parameter of the auxiliary model, using the sample data,
+ and 
+\begin_inset Formula $Z_{n}^{s}(\theta)$
+\end_inset
+
+ is the estimated auxiliary parameter using a sample simulated at 
+\begin_inset Formula $\theta$
+\end_inset
+
+.
+ For EMM, 
+\begin_inset Formula $Z_{n}$
+\end_inset
+
+ is the score vector of the auxiliary model, at the estimated parameter
+ of the auxiliary model, using the sample data, and, thus, it is a vector
+ of zeros.
+ 
+\begin_inset Formula $Z_{n}^{s}(\theta)$
+\end_inset
+
+ is the same score vector, but using data simulated from the model at 
+\begin_inset Formula $\theta$
+\end_inset
+
+.
+ The efficiency of II and EMM estimators will depend upon the quality of
+ the auxiliary model.
+ The EMM estimator targets efficiency by using a semi-nonparametric density
+ to form a quasi-likelihood.
+ MENTION SMOOTH EMBEDDING.
+ This can potentially lead to an auxiliary model with many parameters, and
+ the MSM estimator may thus be highly overidentified, which can lead to
+ problems for reliable inferences (
+\begin_inset CommandInset citation
+LatexCommand citet
+key "hall1996bootstrap"
+literal "false"
+
+\end_inset
+
+, 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "HansenHeatonYaron1996"
+literal "false"
+
+\end_inset
+
+, 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "DonaldImbensNewey2009"
+literal "false"
+
+\end_inset
+
+.
+ The II estimator has a less formal approach to selecting the auxiliary
+ model.
+ Finally, it is of course possible to combine ad hoc statistics with statistics
+ from auxiliary models, but then the issue of selection remains.
+ In summary, for the MSM, it can be challenging to find statistics that
+ result in both efficient estimation and reliable inferences.
+ 
+\end_layout
+
+\begin_layout Standard
+The goal of this paper is to directly 
+\bar under
+construct
+\bar default
+ an exactly identifying set of statistics that are not only informative,
+ but which are approximately fully asymptotically efficient.
+ Because the set is exactly identifying, we hope to simultaneously avoid
+ the problems of overidentification for reliable inferences that have been
+ referenced above.
+\end_layout
+
+\begin_layout Enumerate
+Fact: under fairly general conditions, the posterior mean has the same asymptoti
+c distributions as does the ML estimator, so is asymptotically efficient
+ (
+\begin_inset CommandInset citation
+LatexCommand cite
+key "ChernozhukovHong2003"
+literal "false"
+
+\end_inset
+
+ and similar refs.).
+\end_layout
+
+\begin_layout Enumerate
+Conjecture, based on universal approximation theorem (
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Hornik1989MFN:70405.70408"
+literal "false"
+
+\end_inset
+
+): A recurrent net that fits samples to the parameters that generated them,
+ using a MSE loss function, will converge to the posterior mean of the parameter
+s, given the sample, or to something close to it.
+ As far as I know, formal results for RNNs are still very vague.
+ Nevertheless, much evidence has accumulated about good predictions under
+ squared error loss.
+\end_layout
+
+\begin_layout Standard
+Main implication:
+\end_layout
+
+\begin_layout Standard
+With these two, the output of a net that is rich enough and well enough
+ trained
+\end_layout
+
+\begin_layout Enumerate
+will be a good point estimator for the parameters that generated the sample
+\end_layout
+
+\begin_layout Enumerate
+can be used as moment conditions for the method of simulated moments.
+ Because these moment conditions are close to the ML estimator, these moment
+ conditions will give a MSM estimator that is approximately fully efficient.
+ This solves one of the fundamental problems of MSM and GMM in general,
+ which is the problem of selecting moments.
+\end_layout
+
+\begin_layout Enumerate
+The reason to use MSM, or a Bayesian version thereof, instead of just the
+ point estimator from the net, is that the net does not give standard error
+ estimates, so it is not clear how to do inference.
+ MSM does give standard error estimates, and allows for construction of
+ confidence intervals.
+ Furthermore, with statistics that come from a trained net, the MSM estimator
+ is just identified, and inferences are more reliable than for overidentified
+ MSM estimators (
+\begin_inset CommandInset citation
+LatexCommand cite
+key "creel2021inference"
+literal "false"
+
+\end_inset
+
+).
+ 
+\end_layout
+
+\begin_layout Section
+Work plan
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+Goals:
+\end_layout
+
+\begin_layout Enumerate
+Show that RNNs can give good point estimates for several econometric models.
+ When possible, compare to ML estimation, to verify full efficiency.
+\end_layout
+
+\begin_layout Enumerate
+Go on to apply Bayesian MSM to do inferences, and apply the methods to a
+ real problem with real data.
+\end_layout
+
+\begin_layout Enumerate
+Formalize theory.
+ This would require another coauthor.
+ I have a contact, and can ask if he's interested.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+Organization of paper(s)
+\end_layout
+
+\begin_layout Standard
+Goal 1 could be done in a paper of it's own.
+ This would be a relatively simple, short paper.
+ It would probably not get published in a very high ranked journal, as it
+ would be technical and without strong theoretical justification.
+\end_layout
+
+\begin_layout Standard
+Then, another paper could build on the first, and do goal 2.
+ This paper might be publishable in a reasonable quality applied econometrics
+ journal.
+\end_layout
+
+\begin_layout Standard
+A paper doing goal 3, with an example(s) from goal 2, could possibly be
+ published in a high ranked journal.
+ Howver, the math to achieve goal 3 may be beyond even a good mathematician.
+\end_layout
+
+\begin_layout Section
+Evidence so far
+\end_layout
+
+\begin_layout Subsection
+Earlier versions, need update 
+\end_layout
+
+\begin_layout Standard
+AR1 and Logit models have old code in the archive.
+ These worked pretty well, but need an update.
+ The AR1 is about the simplest time series model possible, so is a reasonable
+ minimal example.
+ Could use MA1 instead.
+ The Logit model is a simple cross sectional model.
+ These can be updated using the Garch code as a template.
+\end_layout
+
+\begin_layout Subsection
+GARCH
+\end_layout
+
+\begin_layout Standard
+The standard GARCH(1,1) model is 
+\begin_inset Formula 
+\begin{align*}
+y_{t} & =\sqrt{h_{t}}\epsilon_{t}\\
+h_{t} & =\omega+\alpha\epsilon_{t-1}^{2}+\beta h_{t-1}
+\end{align*}
+
+\end_inset
+
+For this model, the long run variance is 
+\begin_inset Formula $lrv=\omega/(1-(\alpha+\beta))$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+This is in the current code, and is working quite well.
+ The ML estimation is done using simulated annealing, which allows enforcing
+ the bounds of the prior, which makes comparison with RNN fair, as the RNN
+ also uses the prior.
+ The RNN results show declining RMSE over samples of size 100, 200, 400,
+ 800, but then as we go to 1600 and 3200, it is flat or slightly increasing.
+ For reference, aggregate RMSE from the prior is 0.29, so both RNN and ML
+ are improving over the prior.
+ We would like to see RMSE for the net to decline to zero as N gets very
+ large (consistent estimation).
+\end_layout
+
+\begin_layout Standard
+A main objective for Goal 1 should be to find a way to make RMSE decline
+ uniformly as N increases.
+ Different net architecture, different training, or perhaps the LSTMs are
+ forgetting the first part of the sample?
+\end_layout
+
+\begin_layout Standard
+One idea is to get predictions for subsamples of say perhaps 400, where
+ RMSE is declining well, and average them.
+ The code is currently doing averaging of predictions for each observation,
+ here: 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Box Shaded
+position "t"
+hor_pos "c"
+has_inner_box 1
+inner_pos "t"
+use_parbox 0
+use_makebox 0
+width "100col%"
+special "none"
+height "1in"
+height_special "totalheight"
+thickness "0.4pt"
+separation "3pt"
+shadowsize "4pt"
+framecolor "black"
+backgroundcolor "none"
+status open
+
+\begin_layout Plain Layout
+
+\family typewriter
+# Compute prediction and error
+\end_layout
+
+\begin_layout Plain Layout
+
+\family typewriter
+#Ŷ = StatsBase.reconstruct(dtY, nnet(X[end]))
+\end_layout
+
+\begin_layout Plain Layout
+
+\family typewriter
+# Alternative: this is averaging prediction at each observation in sample
+\end_layout
+
+\begin_layout Plain Layout
+
+\family typewriter
+Ŷ = mean([StatsBase.reconstruct(dtY, nnet(x)) for x ∈ X])
+\end_layout
+
+\begin_layout Plain Layout
+
+\family typewriter
+err_nnet[:, :, i] = Ŷ - Y
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+which is intended to have this effect.
+ Perhaps it's not the best way, though.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:Importances-of-statistics,"
+
+\end_inset
+
+Importances of statistics, jump diffusion model
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename /home/michael/git/FISNM/GARCH/rmse_benchmark_base.png
+	width 12cm
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset bibtex
+LatexCommand bibtex
+btprint "btPrintCited"
+bibfiles "econometrics,/home/michael/Mystuff/Econometrics/econometrics"
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document
