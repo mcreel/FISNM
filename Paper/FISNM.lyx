@@ -99,7 +99,7 @@
 \use_package undertilde 1
 \cite_engine biblatex
 \cite_engine_type authoryear
-\biblio_style plain
+\biblio_style plainnat
 \biblatex_bibstyle authoryear
 \biblatex_citestyle authoryear
 \use_bibtopic false
@@ -139,7 +139,7 @@
 \begin_body
 
 \begin_layout Title
-Neural Networks for Efficient Estimation of Parameters of Econometric Models
+Neural Networks for Efficient Estimation of Parameters of Simulable Models
 \end_layout
 
 \begin_layout Author
@@ -198,15 +198,14 @@ Introduction
 \end_layout
 
 \begin_layout Standard
-The method of simulated moments (MSM, 
-\begin_inset CommandInset citation
-LatexCommand cite
-key "McFadden1989MSM"
-literal "false"
-
-\end_inset
-
-) is based on moment conditions of the form 
+This paper is concerned with the estimation of the parameters of simulable
+ models.
+ If standard methods such as maximum likelihood or the generalized method
+ of moments are not possible, simulation-based estimation is often resorted
+ to.
+ Amongst simulation-based methods, the method of simulated moments (MSM,
+ McFadden 1989) is probably the most widely used.
+ MSM is based on moment conditions of the form 
 \begin_inset Formula $m_{n}(\theta)=Z_{n}-\frac{1}{S}\sum_{s}Z_{n}^{s}(\theta)$
 \end_inset
 
@@ -214,7 +213,7 @@ literal "false"
 \begin_inset Formula $Z_{n}$
 \end_inset
 
-is a vector of statistics formed of functions of the sample data, and 
+ is a vector of statistics formed of functions of the sample data, and 
 \begin_inset Formula $Z_{n}^{s}(\theta)$
 \end_inset
 
@@ -242,7 +241,16 @@ literal "false"
 \end_inset
 
 ) also relies on simulated statistics and measures of distance from the
- sample statistics.
+ sample statistics, and some of its forms are essentially a Bayesian version
+ of MSM using the methods of 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "ChernozhukovHong2003"
+literal "false"
+
+\end_inset
+
+.
  Here, we focus on the MSM perspective, but the ideas also have relevance
  for the ABC literature.
  For both of these literatures, an important question is how to choose the
@@ -255,20 +263,47 @@ literal "false"
 
 \begin_layout Standard
 This question has been approached from at least two perspectives.
- A first is to devise methods for selecting the informative statistics from
- a set of ad hoc statistics, such as sample means, variances, covariances,
- autocovariances, and so forth.
- References include ...., A potential weakness of this approach is that the
- initial set of statistics may not be, as a whole, highly informative or
- identifying, so even if.
- Mention my papers, among other, as examples.
- and as survey is given in Section 4 of Hall 2015.
- 
+ A first starts with a set of statistics, which may be ad hoc or chosen
+ following informed criteria.
+ GMM WORKS POORLY WHEN THERE ARE MANY MOMENTS - ref.
+ Because and then uses selection, projection and/or regularization methods
+ to reduce the number of moments by elimination or combination.
+ This is a large literature, which is related to the literature on optimal
+ instruments.
+ References include 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "DonaldImbensNewey2009"
+literal "false"
+
+\end_inset
+
+, 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "carrasco2012regularization"
+literal "false"
+
+\end_inset
+
+ and 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "hall2015econometricians"
+literal "false"
+
+\end_inset
+
+.
+ A limitation of this approach is that asymptotic efficiency at best reaches
+ the semiparametric efficiency bound, which is determined by initial set
+ of statistics, and these statistics may not be informative or well identify
+ all of the parameters of the model.
 \end_layout
 
 \begin_layout Standard
-A second is to use statistics which are based on an auxiliary model that
- is thought to well capture the features of the actual model.
+A second approach is to use statistics which are based on an auxiliary model
+ that is thought to well capture the features of the actual model.
  Examples of this approach are indirect inference (II, 
 \begin_inset CommandInset citation
 LatexCommand cite
@@ -327,11 +362,12 @@ literal "false"
  The efficiency of II and EMM estimators will depend upon the quality of
  the auxiliary model.
  The EMM estimator targets efficiency by using a semi-nonparametric density
- to form a quasi-likelihood.
- MENTION SMOOTH EMBEDDING.
+ to form quasi-likelihood which may, under certain circumstances, lead to
+ fully efficient estimation, if the number of parameters of the auxiliary
+ model grows appropriately with the sample size.
  This can potentially lead to an auxiliary model with many parameters, and
- the MSM estimator may thus be highly overidentified, which can lead to
- problems for reliable inferences (
+ the MSM estimator that uses such moments may thus be highly overidentified,
+ which can lead to problems for reliable inferences (
 \begin_inset CommandInset citation
 LatexCommand citet
 key "hall1996bootstrap"
@@ -357,24 +393,60 @@ literal "false"
 
 .
  The II estimator has a less formal approach to selecting the auxiliary
- model.
+ model, which will have a fixed and finite number of parameters.
+ With II, the hope is that the auxiliary model is a good enough approximation
+ to the actual model so that it will give moments that are reasonably efficient.
  Finally, it is of course possible to combine ad hoc statistics with statistics
  from auxiliary models, but then the issue of selection remains.
  In summary, for the MSM, it can be challenging to find statistics that
- result in both efficient estimation and reliable inferences.
+ result in both efficient estimation and reliable inferences, and which
+ are computationally straightforward.
  
 \end_layout
 
 \begin_layout Standard
-The goal of this paper is to directly 
+Our research objective is to 
 \bar under
 construct
 \bar default
  an exactly identifying set of statistics that are not only informative,
- but which are approximately fully asymptotically efficient.
- Because the set is exactly identifying, we hope to simultaneously avoid
- the problems of overidentification for reliable inferences that have been
- referenced above.
+ but which also lead to an MSM estimator that is approximately fully asymptotica
+lly efficient.
+ Our approach is to fit neural networks that take the sample data as their
+ inputs and the parameters of the model as their outputs.
+ Because the model is simulable, it is possible to generate as much data
+ as is needed to train the networks well.
+ By construction, the output of the net has the same dimension as the parameter
+ vector of the model.
+ If the net fits well, then the output of the net is informative for the
+ parameters, and it will thus be an exactly identifying statistic.
+ As such, we expect to avoid the problems of overidentification for reliable
+ inferences that have been referenced above.
+ The goal of this paper is to show that this approach can give statistics
+ that equal or better the performance of the maximum likelihood estimator.
+\end_layout
+
+\begin_layout Standard
+Papers that directly estimate parameters from full sample using NN: 
+\end_layout
+
+\begin_layout Standard
+Jiang et al 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "jiang2017learning"
+literal "false"
+
+\end_inset
+
+ simple MLP.
+ Not efficient, shown by Creel 2017.
+\end_layout
+
+\begin_layout Standard
+Fisher et al 2020 use RNNs to estimate posterior quantiles.
+ How efficient compared to ML? Any example implicitly shows that? Our work
+ with RNNs shows they are not best optin.
 \end_layout
 
 \begin_layout Enumerate
@@ -650,12 +722,6 @@ Importances of statistics, jump diffusion model
 \end_layout
 
 \begin_layout Plain Layout
-\begin_inset Graphics
-	filename /home/michael/git/FISNM/GARCH/rmse_benchmark_base.png
-	width 12cm
-
-\end_inset
-
 
 \end_layout
 
@@ -675,7 +741,7 @@ Importances of statistics, jump diffusion model
 \begin_inset CommandInset bibtex
 LatexCommand bibtex
 btprint "btPrintCited"
-bibfiles "econometrics,/home/michael/Mystuff/Econometrics/econometrics"
+bibfiles "/home/michael/Mystuff/Econometrics/econometrics"
 
 \end_inset
 
