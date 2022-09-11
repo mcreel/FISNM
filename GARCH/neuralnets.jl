@@ -1,78 +1,215 @@
-using Flux, StatsBase
-using BSON:@save
-using BSON:@load
+using Flux
+using StatsBase
 
-#helpers
-tabular2rnn(X) = [X[i:i, :] for i ∈ 1:size(X, 1)]
+# Some helpers
+tabular2rnn(X) = [view(X, i:i, :) for i ∈ 1:size(X, 1)]
+tabular2conv(X) = permutedims(reshape(X, size(X)..., 1, 1), (4, 1, 3, 2))
 
-lstm_net(n_hidden, k, g) = 
-Chain(
-      LSTM(g, n_hidden),
-      Dense(n_hidden, k)
+# In the following losses, Ŷ is always the sequence of predictions
+# RMSE on last item only
+rmse_loss(Ŷ, Y) = sqrt(mean(abs2.(Ŷ[end] - Y)))
+rmse_conv(Ŷ, Y) = sqrt(mean(abs2, Ŷ - Y))
+# MSE on full sequence predicton
+mse_full(Ŷ, Y) = sum(mean(abs2.(ŷᵢ - Y) for ŷᵢ ∈ Ŷ))
+mse_conv(Ŷ, Y ) = sum(abs2, Ŷ - Y)
+# ------------------------------------------------------------------------------------------
+
+# Create a neural network according to chosen specification
+function build_net(;
+    input_nodes=1, output_nodes=3, hidden_nodes=32, dropout_rate=.2, 
+    hidden_layers=2, rnn_cell=Flux.LSTM, activation=tanh, add_dropout=true,
+    dev=cpu
 )
-
-# Create batches of a time series
-# The data going in is expected as kXT.
-# In the simple case of s=t, the output is T/s batches of size s, ready
-# to supply to the rnn. Thanks to Jonathan Chassot for this, see
-# https://www.jldc.ch/posts/batching-time-series-in-flux/
-function batch_timeseries(X, s::Int, r::Int)
-    if isa(X, AbstractVector) # If X is passed in format T×1, reshape it
-        X = permutedims(X)
+    # Input layer
+    layers = Any[Dense(input_nodes => hidden_nodes, activation)] 
+    # Hidden layers
+    for i ∈ 1:hidden_layers 
+        add_dropout && push!(layers, Dropout(dropout_rate))
+        push!(layers, rnn_cell(hidden_nodes => hidden_nodes))
     end
-    T = size(X, 2)
-    @assert s ≤ T "s cannot be longer than the total series"
-    if s == r   # Non-overlapping case, each batch has unique elements
-        X = X[:, (T % s)+1:end]         # Ensure uniform sequence lengths
-        T = size(X, 2)                  # Re-store series length
-       [X[:, t:s:T] for t ∈ 1:s] # Output
-    else        # Overlapping case
-        X = X[:, ((T - s) % r)+1:end]   # Ensure uniform sequence lengths
-        T = size(X, 2)                  # Re-store series length
-        [X[:, t:r:T-s+t] for t ∈ 1:s] # Output
+    # Output layer
+    push!(layers, Dense(hidden_nodes => output_nodes))
+    Chain(layers...) |> dev
+end
+
+# Bidirectional RNN, see:
+#   - https://github.com/maetshju/flux-blstm-implementation/blob/master/01-blstm.jl
+#   - https://github.com/FluxML/model-zoo/blob/master/contrib/audio/speech-blstm/01-speech-blstm.jl
+struct BiRNN
+    encoder
+    forward
+    backward
+    output
+end
+Flux.@functor BiRNN
+
+function (m::BiRNN)(x)
+    x = m.encoder.(x)
+    x = vcat.(m.forward.(x), Flux.flip(m.backward, x))
+    m.output.(x)[end]
+end
+
+# Create a Bidirectional RNN
+function build_bidirectional_net(;
+    input_nodes=1, output_nodes=3, hidden_nodes=32, dropout_rate=.2, 
+    hidden_layers=2, rnn_cell=Flux.LSTM, activation=tanh, add_dropout=true,
+    dev=cpu
+)
+    # Encoder / input layer
+    enc = Dense(input_nodes => hidden_nodes, activation)
+    # RNN layers
+    layers = Any[]
+    for i ∈ 1:hidden_layers
+        add_dropout && push!(layers, Dropout(dropout_rate))
+        push!(layers, rnn_cell(hidden_nodes => hidden_nodes))
+    end
+    rnn₁ = Chain(layers...)
+    rnn₂ = deepcopy(rnn₁)
+    # Output layer
+    out = Dense(2hidden_nodes => output_nodes)
+    # Bidirectional RNN
+    BiRNN(enc, rnn₁, rnn₂, out) |> dev
+end
+
+# Alias for LSTM and BiLSTM net construction
+lstm_net(n_hidden, n_out, n_in, dev=cpu) = 
+    build_net(hidden_nodes=n_hidden, output_nodes=n_out, input_nodes=n_in, 
+        add_dropout=false, dev=dev)
+bilstm_net(n_hidden, n_out, n_in, dev=cpu) = 
+    build_bidirectional_net(hidden_nodes=n_hidden, output_nodes=n_out, input_nodes=n_in, 
+        add_dropout=false, dev=dev)   
+
+# ------------------------------------------------------------------------------------------
+
+# Trains a recurrent neural network
+function train_rnn!(
+    m, opt, dgp, n, S, dtY; 
+    epochs=100, batchsize=32, dev=cpu, loss=mse_full,
+    validation_loss=true, verbosity=1, bidirectional=false
+)
+    Flux.trainmode!(m) # In case we have dropout / batchnorm
+    θ = Flux.params(m) # Extract parameters
+    
+    # Create a validation set to compute and keep track of losses
+    if validation_loss
+        Xv, Yv = map(dev, dgp(n, S))
+        StatsBase.transform!(dtY, Yv)
+        Xv = tabular2rnn(Xv)
+        losses = zeros(epochs)
+    end
+    
+    # Iterate over training epochs
+    for epoch ∈ 1:epochs
+        X, Y = map(dev, dgp(n, S)) # Generate a new batch
+        # Standardize targets for MSE scaling
+        # no need to do this for every sample, use a high accuracy
+        # transform from large draw from prior
+        StatsBase.transform!(dtY, Y)
+
+        # ----- Minibatch training ---------------------------------------------
+        for idx ∈ Iterators.partition(1:S, batchsize)
+            Flux.reset!(m)
+            # Extract batch, transform features to format for RNN
+            Xb, Yb = tabular2rnn(X[:, idx]), Y[:, idx]
+            # Compute loss and gradients
+            if bidirectional # Special case for bidirectional RNN
+                ∇ = gradient(θ) do
+                    Ŷ = [m(Xb)]
+                    loss(Ŷ, Yb)
+                end
+                Flux.update!(opt, θ, ∇) # Take gradient descent step
+            else
+                ∇ = gradient(θ) do
+                    m(Xb[1]) # don't use first, to warm up state
+                    Ŷ = [m(x) for x ∈ Xb[2:end]]
+                    loss(Ŷ, Yb)
+                end
+                Flux.update!(opt, θ, ∇) # Take gradient descent step
+            end
+        end
+
+        # Compute validation loss and print status if verbose
+        if validation_loss
+            Flux.reset!(m)
+            Flux.testmode!(m)
+            if bidirectional # Special case for bidirectional RNN
+                Ŷ = [m(Xv)]
+            else
+                m(Xv[1]) # Warm up state on first observation
+                Ŷ = [m(x) for x ∈ Xv[2:end]]
+            end
+            current_loss = loss(Ŷ, Yv)
+            losses[epoch] = current_loss
+            Flux.trainmode!(m)
+            epoch % verbosity == 0 && @info "$epoch / $epochs" current_loss
+        else
+            epoch % verbosity == 0 && @info "$epoch / $epochs"
+        end
+    end
+    # Return losses if tracked
+    if validation_loss
+        losses
+    else
+        nothing
     end
 end
 
-function train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs, dtY)
-    # size to test data sets
-    testsize = 5000
-    # create test data
-    Xout, Yout  = dgp(n, testsize)
-    Xout = batch_timeseries(Xout, n, n)
-    #initialize tracking 
-    bestsofar = 1.0e10
-    bestmodel = m
-    # train
-    θ = Flux.params(m)
-    for r = 1:datareps
-        X, Y  = dgp(n, batchsize)
-        X = batch_timeseries(X, n, n)
-        # scale the labels for computing gradients
-        StatsBase.transform!(dtY, Y)
-        for epoch ∈ 1:epochs
-            Flux.reset!(m)
-            ∇ = gradient(θ) do 
-                # don't use first, to warm up state
-                m(X[1])
-                pred = mean([m(x) for x ∈ X[2:end]])
-                mean(sqrt.(mean([abs2.(Y - pred)])))
-            end
-            Flux.update!(opt, θ, ∇)
-        end
-        # periodically check fit to test set (unscaled labels)
-        # and save model if good enough improvement
-        if mod(r,10) == 0
-            Flux.reset!(m)
-            m(Xout[1])
-            pred = StatsBase.reconstruct(dtY, mean([m(x) for x ∈ Xout[2:end]]))
-            current = mean(sqrt.(mean([abs2.(Yout - pred)])))
-            if current < bestsofar
-                bestsofar = current
-                BSON.@save "bestmodel_$n.bson" m
-                println("datarep: $r of $datareps")
-                println("current best: $current")
-            end
-        end    
+# Train a convolutional neural network
+function train_cnn!(
+    m, opt, dgp, n, S, dtY;
+    epochs=100, batchsize=32, dev=cpu, loss=mse_conv,
+    validation_loss=true, verbosity=1
+)
+    Flux.trainmode!(m) # In case we have dropout / batchnorm
+    θ = Flux.params(m) # Extract parameters
+
+    # Create a validation set to compute and keep track of losses
+    if validation_loss
+        Xv, Yv = map(dev, dgp(n, S))
+        StatsBase.transform!(dtY, Yv)
+        Xv = tabular2conv(Xv)
+        losses = zeros(epochs)
     end
-    BSON.@load "bestmodel_$n.bson" m
+
+    # Iterate over training epochs
+    for epoch ∈ 1:epochs
+        X, Y = map(dev, dgp(n, S)) # Generate a new batch
+        # Standardize targets for MSE scaling
+        # no need to do this for every sample, use a high accuracy
+        # transform from large draw from prior
+        StatsBase.transform!(dtY, Y)
+        # Transform features to format for CNN
+        X = tabular2conv(X)
+        # ----- Minibatch training ---------------------------------------------
+        for idx ∈ Iterators.partition(1:S, batchsize)
+            Flux.reset!(m)
+            # Extract batch, transform features to format for RNN
+            Xb, Yb = X[:, :, :, idx], Y[:, idx]
+            # Compute loss and gradients
+            ∇ = gradient(θ) do
+                Ŷ = m(Xb)
+                loss(Ŷ, Yb)
+            end
+            Flux.update!(opt, θ, ∇) # Take gradient descent step
+        end
+
+        # Compute validation loss and print status if verbose
+        if validation_loss
+            Flux.reset!(m)
+            Flux.testmode!(m)
+            Ŷ = m(Xv)
+            current_loss = loss(Ŷ, Yv)
+            losses[epoch] = current_loss
+            Flux.trainmode!(m)
+            epoch % verbosity == 0 && @info "$epoch / $epochs" current_loss
+        else
+            epoch % verbosity == 0 && @info "$epoch / $epochs"
+        end
+    end
+    # Return losses if tracked
+    if validation_loss
+        losses
+    else
+        nothing
+    end
 end

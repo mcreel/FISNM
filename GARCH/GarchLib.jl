@@ -1,4 +1,5 @@
-using Distributions, DelimitedFiles, Statistics, Flux, CUDA, BSON
+using Distributions, DelimitedFiles, Flux, CUDA, BSON
+using StatsBase
 
 # estimates GARCH with SP500 data, to get reasonable parameters
 # and standard errors.
@@ -32,6 +33,7 @@ end
 # returns are:
 # x: 1 X S*n vector of data from EGARCH model
 # y: 3 X S*n vector of parameters used to generate each sample
+
 @views function dgp(n, S)
     y = PriorDraw(S)     # the parameters for each sample
     x = zeros(1, n*S)    # the Garch data for each sample
@@ -41,10 +43,9 @@ end
     Float32.(x), Float32.(y)
 end    
 
-
 # the likelihood function, alternative version with reparameterization
 @views function SimulateGarch11(θ, n)
-    burnin = 1000
+    burnin = 0
     # dissect the parameter vector
     lrv, βplusα , share  = θ
     ω = (1.0 - βplusα)*lrv
@@ -53,10 +54,12 @@ end
     ys = zeros(n)
     h = lrv
     y = 0.
-    for t = 1:burnin + n
+    for t = 1:(burnin + n)
         h = ω + α*y^2. + β*h
         y = sqrt(h)*randn()
-        t > burnin ? ys[t-burnin] = y : nothing
+        if t > burnin
+            ys[t-burnin] = y
+        end
     end
     ys'
 end
@@ -81,3 +84,6 @@ end
     end
     logL = -log(sqrt(2.0*pi)) .- 0.5*log.(h) .- 0.5*(y.^2.)./h
 end
+
+is_possible_garch(lrv, βplusα, share) = 
+    (0 < lrv ≤ 1) && (0 ≤ βplusα < 1) && (0 ≤ share ≤ 1)
