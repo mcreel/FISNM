@@ -6,9 +6,11 @@ function main()
 thisrun = "working"
 # General parameters
 
+k = 3 # number of labels
+g = 4 # number of features
 n_hidden = 16
 MCreps = 1000 # Number of Monte Carlo samples for each sample size
-datareps = 3000 # number of repetitions of drawing sample
+datareps = 1000 # number of repetitions of drawing sample
 batchsize = 100
 epochs = 10 # passes over each batch
 N = [50, 100, 150, 200]  # Sample sizes (most useful to incease by 4X)
@@ -49,9 +51,9 @@ Random.seed!(trainseed) # avoid sample contamination for NN training
 Threads.@threads for i = 1:size(N,1)
     n = N[i]
     # Create network with 32 hidden nodes
-    nnet = lstm_net(n_hidden)
+    nnet = lstm_net(n_hidden, k, g)
     # Train network
-    opt = ADAMW()
+    opt = ADAM()
     train_rnn!(nnet, opt, dgp, n, datareps, batchsize, epochs, dtY)
     # Compute network error on a new batch
     BSON.@load "bestmodel_$n.bson" m
@@ -62,7 +64,7 @@ Threads.@threads for i = 1:size(N,1)
     Flux.testmode!(m) # In case nnet has dropout / batchnorm
     Flux.reset!(m)
     m(X[1]) # warmup
-    Yhat = [m(x) for x ∈ X[2:end]][end]
+    Yhat = StatsBase.reconstruct(dtY, mean([m(x) for x ∈ X[2:end]]))
     err_nnet[:, :, i] = Y - Yhat
     # Save model as BSON
     println("Neural network, n = $n done.")

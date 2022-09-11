@@ -72,10 +72,12 @@ function build_bidirectional_net(;
 end
 
 # Alias for LSTM and BiLSTM net construction
-lstm_net(n_hidden, dev=cpu) = 
-    build_net(hidden_nodes=n_hidden, add_dropout=false, dev=dev)
-bilstm_net(n_hidden, dev=cpu) = 
-    build_bidirectional_net(hidden_nodes=n_hidden, add_dropout=false, dev=dev)   
+lstm_net(n_hidden, n_out, n_in, dev=cpu) = 
+    build_net(hidden_nodes=n_hidden, output_nodes=n_out, input_nodes=n_in, 
+        add_dropout=false, dev=dev)
+bilstm_net(n_hidden, n_out, n_in, dev=cpu) = 
+    build_bidirectional_net(hidden_nodes=n_hidden, output_nodes=n_out, input_nodes=n_in, 
+        add_dropout=false, dev=dev)   
 
 # ------------------------------------------------------------------------------------------
 
