@@ -43,6 +43,7 @@ for i = 1:size(N,1)
     n = N[i]
     n_layers = layers[i]
     # Create TCN
+    opt = ADAM()
     tcn = dev(
         Chain(
             TCN(vcat(g, [channels for _ ∈ 1:n_layers], 1), kernel_size=kernel_size, 
@@ -54,8 +55,8 @@ for i = 1:size(N,1)
     )
     # Train network (use 40x the epochs for TCN as it is extremely fast to train)
     Random.seed!(trainseed) # use other seed this, to avoid sample contamination for NN training
-    train_cnn!(tcn, ADAM(), dgp, n, datareps, dtY, epochs=tcn_epochs, dev=dev, 
-        validation_loss=false, verbosity=100)
+    train_cnn!(tcn, opt, dgp, n, datareps, dtY, batchsize=batchsize, epochs=tcn_epochs, 
+        dev=dev, validation_loss=false, verbosity=100)
     
     # Compute network error on a new batch
     Random.seed!(testseed)
@@ -81,10 +82,11 @@ for i = 1:size(N,1)
     n = N[i]
     # Create network with 32 hidden nodes
     nnet = lstm_net(n_hidden, k, g, dev)
-    # Train network (it seems we can still improve by going over 200 epochs!)
+    opt = ADAM()
+    # Train network
     Random.seed!(trainseed) # use other seed this, to avoid sample contamination for NN training
-    train_rnn!(nnet, AdaDelta(), dgp, n, datareps, dtY, epochs=epochs, dev=dev,
-        validation_loss=false, verbosity=25)
+    train_rnn!(nnet, opt, dgp, n, datareps, dtY, batchsize=batchsize, epochs=epochs, 
+        dev=dev, validation_loss=false, verbosity=25)
     # Compute network error on a new batch
     Random.seed!(testseed)
     X, Y = map(dev, dgp(n, MCreps)) # Generate data according to DGP
@@ -110,10 +112,11 @@ for i = 1:size(N,1)
     n = N[i]
     # Create bidirectional network with 32 hidden nodes
     bnnet = bilstm_net(n_hidden, k, g, dev)
-    # Train network (it seems we can still improve by going over 200 epochs!)
+    opt = ADAM()
+    # Train network
     Random.seed!(trainseed) # use other seed this, to avoid sample contamination for NN training
-    train_rnn!(bnnet, AdaDelta(), dgp, n, datareps, dtY, epochs=epochs, dev=dev,
-        validation_loss=false, bidirectional=true, verbosity=25)
+    train_rnn!(bnnet, opt, dgp, n, datareps, dtY, batchsize=batchsize, epochs=epochs, 
+        dev=dev, validation_loss=false, bidirectional=true, verbosity=25)
     # Compute network error on a new batch
     Random.seed!(testseed)
     X, Y = map(dev, dgp(n, MCreps)) # Generate data according to DGP
