@@ -35,9 +35,9 @@ end
 # y: 2 X S*n vector of parameters used to generate each sample
 @views function dgp(n, S)
     y = PriorDraw(S)     # the parameters for each sample
-    x = zeros(1, n*S)    # the Garch data for each sample
+    x = zeros(n, S)    # the Garch data for each sample
     for s = 1:S
-        x[:,n*s-n+1:s*n] = ma2(y[:,s], n)
+        x[:,s] = ma2(y[:,s], n)
     end
     Float32.(x), Float32.(y)
 end    
