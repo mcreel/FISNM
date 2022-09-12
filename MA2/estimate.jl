@@ -142,7 +142,7 @@ function main()
         @info "Recurrent neural network, n = $n done.\n"
     end
     # Save BSON with results for all sample sizes / models
-    BSON.@save "err_rnn_$thisrun.bson" err_rnn N MCreps datareps rnn_epochs
+    BSON.@save "$path/results/err_rnn_$thisrun.bson" err_rnn N MCreps datareps rnn_epochs
 
 
 end
