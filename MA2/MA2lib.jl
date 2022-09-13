@@ -9,9 +9,21 @@ function PriorDraw()
     while !ok
         θ1 = 4. * rand() - 2.
         θ2 = 2. * rand() - 1.
-        ok = (θ1+θ2 > -1.) & (θ1-θ2 > -1.)
+        ok = InSupport([θ1,θ2])
     end
     [θ1, θ2]
+end
+
+function InSupport(θ)
+    θ1, θ2 = θ
+    all([
+         (θ2+θ1 > -1.0), 
+         (θ2-θ1 > -1.0), 
+         (θ1>-2.0),
+         (θ1 < 2.0),
+         (θ2 > -1.0),
+         (θ2 < 1.0)
+        ])
 end
 
 # get a set of draws from prior

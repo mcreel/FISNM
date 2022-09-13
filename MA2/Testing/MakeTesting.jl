@@ -1,4 +1,4 @@
-using Random, BSON
+using Random, DelimitedFiles
 include("../MA2lib.jl")
 
 function MakeTestingParams(seed, n, reps)
@@ -21,12 +21,13 @@ function MakeTestingData(seed, params, n)
 end
 
 function main()
-    ns = (100, 200, 400)
-    mcreps = Int64(1e5)
+    ns = (100, 200, 400, 800, 1600, 3200)
+    mcreps = Int64(5e3)
     for n ∈ ns
         testing_params = MakeTestingParams(77, n, mcreps)
         testing_data = MakeTestingData(78, testing_params, n)
-        BSON.@save "testing_$n.bson" testing_params testing_data
+        writedlm("params_$n.csv", testing_params)
+        writedlm("data_$n.csv", testing_data)
     end
 end
 
