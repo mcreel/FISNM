@@ -27,7 +27,7 @@ for (i, n) ∈ enumerate(N)
     # Fit Logit models by ML on each sample and compute error
     Threads.@threads for s ∈ 1:MCreps
         Y = PriorDraw()
-        data = SimulateLogit(Y, n)
+        data = Logit(Y, n)
         obj = θ -> -LogitLikelihood(θ, data)
         θhat = Optim.optimize(obj, zeros(3), LBFGS(), # start value is true, to save time 
                             Optim.Options(
