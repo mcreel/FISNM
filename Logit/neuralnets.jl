@@ -47,7 +47,8 @@ function train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs)
             ∇ = gradient(θ) do
                 m(X[1]) # don't use first, to warm up state
                 pred = [m(x) for x ∈ X[2:end]][end]
-                mean(sqrt.(mean(abs2.(Y - pred),dims=2)))
+                mean(mean(abs.(Y - pred)))
+                #mean((mean(abs.(Y - pred),dims=2)))
             end
             Flux.update!(opt, θ, ∇)
         end
@@ -57,7 +58,7 @@ function train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs)
             Flux.reset!(m)
             m(Xout[1])
             pred = [m(x) for x ∈ Xout[2:end]][end]
-            current = mean(sqrt.(mean(abs2.(Yout - pred),dims=2)))
+            current = mean(mean(abs.(Yout - pred)))
             if current < bestsofar
                 bestsofar = current
                 BSON.@save "bestmodel_$n.bson" m
