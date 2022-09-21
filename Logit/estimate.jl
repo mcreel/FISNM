@@ -1,4 +1,4 @@
-using Plots, Random, BSON, Optim
+using Plots, Random, BSON, Optim, PrettyTables, Term
 include("LogitLib.jl")
 include("neuralnets.jl")
 
@@ -34,12 +34,16 @@ for (i, n) ∈ enumerate(N)
                             g_tol = 1e-5,
                             x_tol = 1e-6,
                             f_tol=1e-12); autodiff=:forward).minimizer
-        err_mle[:, s, i] = Y - θhat # Compute errors
+        err_mle[:, s, i] = θhat - Y # Compute errors
     end
-    println("ML n = $n done.")
+    println(@green "ML n = $n done.")
+    bias = mean(err_mle[:,:,i], dims=2)
+    mse = mean(abs2.(err_mle[:,:,i]), dims=2)
+    rmse = sqrt.(mse)
+    pretty_table([bias mse rmse], header=["bias", "mse", "rmse"])
 end
 BSON.@save "err_mle_$thisrun.bson" err_mle N
-
+#=
 # NNet estimation (nnet object must be pre-trained!)
 # -----------------------------------------------
 Random.seed!(transformseed) # avoid sample contamination for NN training
@@ -70,6 +74,7 @@ Threads.@threads for i = 1:size(N,1)
     println("Neural network, n = $n done.")
 end
 BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps datareps epochs batchsize
+=#
 end
 main()
 
