@@ -1,11 +1,11 @@
-using Plots, Random, BSON, Optim, PrettyTables, Term
+using Plots, Random, BSON, Optim
 include("LogitLib.jl")
 include("neuralnets.jl")
 
 function main()
 thisrun = "working"
+doMLE = true
 # General parameters
-
 k = 3 # number of labels
 g = 4 # number of features
 n_hidden = 16
@@ -13,42 +13,37 @@ MCreps = 1000 # Number of Monte Carlo samples for each sample size
 datareps = 1000 # number of repetitions of drawing sample
 batchsize = 100
 epochs = 10 # passes over each batch
-N = [50, 100, 150, 200]  # Sample sizes (most useful to incease by 4X)
+N = [50, 100, 150]  # Sample sizes (most useful to incease by 4X)
 testseed = 77
 trainseed = 78
 transformseed = 1204
 
 # Estimation by ML
-# ------------------------------------------------------------------------------
-err_mle = zeros(3, MCreps, length(N))
-# Iterate over different lengths of observed returns
-for (i, n) ∈ enumerate(N) 
-    Random.seed!(testseed) # samples for ML and for NN use same seed
-    # Fit Logit models by ML on each sample and compute error
-    Threads.@threads for s ∈ 1:MCreps
-        Y = PriorDraw()
-        data = Logit(Y, n)
-        obj = θ -> -LogitLikelihood(θ, data)
-        θhat = Optim.optimize(obj, zeros(3), LBFGS(), # start value is true, to save time 
-                            Optim.Options(
-                            g_tol = 1e-5,
-                            x_tol = 1e-6,
-                            f_tol=1e-12); autodiff=:forward).minimizer
-        err_mle[:, s, i] = θhat - Y # Compute errors
+if doMLE
+    # ------------------------------------------------------------------------------
+    err_mle = zeros(3, MCreps, length(N))
+    # Iterate over different lengths of observed returns
+    for (i, n) ∈ enumerate(N) 
+        Random.seed!(testseed) # samples for ML and for NN use same seed
+        # Fit Logit models by ML on each sample and compute error
+        Threads.@threads for s ∈ 1:MCreps
+            Y = PriorDraw()
+            data = Logit(Y, n)
+            obj = θ -> -LogitLikelihood(θ, data)
+            θhat = Optim.optimize(obj, zeros(3), LBFGS(), # start value is true, to save time 
+                                Optim.Options(
+                                g_tol = 1e-5,
+                                x_tol = 1e-6,
+                                f_tol=1e-12); autodiff=:forward).minimizer
+            err_mle[:, s, i] = Y - θhat # Compute errors
+        end
+        println("ML n = $n done.")
     end
-    println(@green "ML n = $n done.")
-    bias = mean(err_mle[:,:,i], dims=2)
-    mse = mean(abs2.(err_mle[:,:,i]), dims=2)
-    rmse = sqrt.(mse)
-    pretty_table([bias mse rmse], header=["bias", "mse", "rmse"])
+    BSON.@save "err_mle_$thisrun.bson" err_mle N
 end
-BSON.@save "err_mle_$thisrun.bson" err_mle N
-#=
+
 # NNet estimation (nnet object must be pre-trained!)
 # -----------------------------------------------
-Random.seed!(transformseed) # avoid sample contamination for NN training
-dtY = fit(ZScoreTransform, PriorDraw(100000)) # use a large sample for this
-
 # Iterate over different lengths of observed returns
 err_nnet = zeros(3, MCreps, length(N))
 Random.seed!(trainseed) # avoid sample contamination for NN training
@@ -58,7 +53,7 @@ Threads.@threads for i = 1:size(N,1)
     nnet = lstm_net(n_hidden, k, g)
     # Train network
     opt = ADAM()
-    train_rnn!(nnet, opt, dgp, n, datareps, batchsize, epochs, dtY)
+    train_rnn!(nnet, opt, dgp, n, datareps, batchsize, epochs)
     # Compute network error on a new batch
     BSON.@load "bestmodel_$n.bson" m
     Random.seed!(testseed)
@@ -68,13 +63,12 @@ Threads.@threads for i = 1:size(N,1)
     Flux.testmode!(m) # In case nnet has dropout / batchnorm
     Flux.reset!(m)
     m(X[1]) # warmup
-    Yhat = StatsBase.reconstruct(dtY, mean([m(x) for x ∈ X[2:end]]))
-    err_nnet[:, :, i] = Y - Yhat
+    Yhat = [m(x) for x ∈ X[2:end]][end]
+    err_nnet[:, :, i] = Yhat - Y
     # Save model as BSON
     println("Neural network, n = $n done.")
 end
 BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps datareps epochs batchsize
-=#
 end
 main()
 
