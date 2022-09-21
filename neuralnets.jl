@@ -89,7 +89,8 @@ function train_rnn!(
 )
     Flux.trainmode!(m) # In case we have dropout / batchnorm
     θ = Flux.params(m) # Extract parameters
-    
+    best_model = deepcopy(m)
+    best_loss = 1e10
     # Create a validation set to compute and keep track of losses
     if validation_loss
         Xv, Yv = map(dev, dgp(n, S))
@@ -139,6 +140,10 @@ function train_rnn!(
                 Ŷ = [m(x) for x ∈ Xv[2:end]]
             end
             current_loss = loss(Ŷ, Yv)
+            if current_loss < best_loss
+                best_loss = current_loss
+                best_model = deepcopy(m)
+            end
             losses[epoch] = current_loss
             Flux.trainmode!(m)
             epoch % verbosity == 0 && @info "$epoch / $epochs" current_loss
@@ -148,7 +153,7 @@ function train_rnn!(
     end
     # Return losses if tracked
     if validation_loss
-        losses
+        losses, best_model
     else
         nothing
     end
@@ -158,15 +163,16 @@ end
 function train_cnn!(
     m, opt, dgp, n, S, dtY;
     epochs=100, batchsize=32, dev=cpu, loss=mse_conv,
-    validation_loss=true, verbosity=1
+    validation_loss=true, verbosity=1, transform=true
 )
     Flux.trainmode!(m) # In case we have dropout / batchnorm
     θ = Flux.params(m) # Extract parameters
-
+    best_model = deepcopy(m)
+    best_loss = 1e10
     # Create a validation set to compute and keep track of losses
     if validation_loss
         Xv, Yv = map(dev, dgp(n, S))
-        StatsBase.transform!(dtY, Yv)
+        transform && StatsBase.transform!(dtY, Yv)
         Xv = tabular2conv(Xv)
         losses = zeros(epochs)
     end
@@ -177,7 +183,7 @@ function train_cnn!(
         # Standardize targets for MSE scaling
         # no need to do this for every sample, use a high accuracy
         # transform from large draw from prior
-        StatsBase.transform!(dtY, Y)
+        transform && StatsBase.transform!(dtY, Y)
         # Transform features to format for CNN
         X = tabular2conv(X)
         # ----- Minibatch training ---------------------------------------------
@@ -195,10 +201,13 @@ function train_cnn!(
 
         # Compute validation loss and print status if verbose
         if validation_loss
-            Flux.reset!(m)
             Flux.testmode!(m)
             Ŷ = m(Xv)
             current_loss = loss(Ŷ, Yv)
+            if current_loss < best_loss
+                best_loss = current_loss
+                best_model = deepcopy(m)
+            end
             losses[epoch] = current_loss
             Flux.trainmode!(m)
             epoch % verbosity == 0 && @info "$epoch / $epochs" current_loss
@@ -208,7 +217,7 @@ function train_cnn!(
     end
     # Return losses if tracked
     if validation_loss
-        losses
+        losses, best_model
     else
         nothing
     end
