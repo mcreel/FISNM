@@ -4,17 +4,17 @@ include("neuralnets.jl")
 
 function main()
 thisrun = "working"
-doMLE = false
+doMLE = true
 # General parameters
 k = 3 # number of labels
 g = 4 # number of features
 n_hidden = 16
-MCreps = 1000 # Number of Monte Carlo samples for each sample size
-BCreps = 100000
+MCreps = 5000 # Number of Monte Carlo samples for each sample size
+BCreps = 1000000
 datareps = 1000 # number of repetitions of drawing sample
 batchsize = 100
 epochs = 10 # passes over each batch
-N = [50, 100, 150]  # Sample sizes (most useful to incease by 4X)
+N = [50, 100, 200, 400, 800, 1600]  # Sample sizes (most useful to incease by 4X)
 MCseed = 77
 trainseed = 78
 BCseed = 1024 # bias correction seed
@@ -80,7 +80,8 @@ Threads.@threads for i = 1:size(N,1)
     # Save model as BSON
     println("Neural network, n = $n done.")
 end
-BSON.@save "err_nnet_$thisrun.bson" err_nnet BC N MCreps datareps epochs batchsize
+BSON.@save "bias_correction.bson" BC N
+BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps datareps epochs batchsize
 end
 main()
 
