@@ -1,12 +1,8 @@
-To explore:
-* Slightly more complicated net for larger sample sizes
-* different optimizers, learning rates?
+* all results use bias correction
+* SplitSampleEstimate.jl uses n=400 as base, and fits larger samples using it
 
+Takeaways:
+both bias correction and splitting sample work. Splitting sample does not get all the
+way to MLE, but helps. 
 
-to replicate:
-
-* start Julia with julia --proj -t auto
-* include("estimate.jl")
-* include("MakePlots.jl")
-* MakePlots("working")
-
+In a sub-branch, will go on to explore TCN
