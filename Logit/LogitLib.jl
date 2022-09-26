@@ -38,7 +38,7 @@ end
     x = zeros(k+1, n*S) # the samples, n obs in each
     y = randn(k, S)     # the parameters, prior is Gaussian N(0,1) for each
     for s = 1:S
-        x[:,s*n-n+1:s*n] = Logit(y[:,s],n)  
+        x[:,s] = Logit(y[:,s],n)  
     end
     Float32.(x), Float32.(y)
 end    

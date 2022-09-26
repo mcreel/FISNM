@@ -1,75 +1,151 @@
-using Plots, Random, BSON, Optim
+using Pkg
+Pkg.activate(".")
+using BSON
+using Random
+
 include("LogitLib.jl")
-include("neuralnets.jl")
+include("../neuralnets.jl")
+include("../TCN.jl")
 
 function main()
-thisrun = "working"
-# General parameters
+    # Save individual BSONs with errors, models, MCreps, datareps and epochs for each model / sample size
 
-k = 3 # number of labels
-g = 4 # number of features
-n_hidden = 16
-MCreps = 1000 # Number of Monte Carlo samples for each sample size
-datareps = 1000 # number of repetitions of drawing sample
-batchsize = 100
-epochs = 10 # passes over each batch
-N = [50, 100, 150, 200]  # Sample sizes (most useful to incease by 4X)
-testseed = 77
-trainseed = 78
-transformseed = 1204
+    thisrun = "experiment"
+    path = "Logit"
 
-# Estimation by ML
-# ------------------------------------------------------------------------------
-err_mle = zeros(3, MCreps, length(N))
-# Iterate over different lengths of observed returns
-for (i, n) ∈ enumerate(N) 
-    Random.seed!(testseed) # samples for ML and for NN use same seed
-    # Fit Logit models by ML on each sample and compute error
-    Threads.@threads for s ∈ 1:MCreps
-        Y = PriorDraw()
-        data = SimulateLogit(Y, n)
-        obj = θ -> -LogitLikelihood(θ, data)
-        θhat = Optim.optimize(obj, zeros(3), LBFGS(), # start value is true, to save time 
-                            Optim.Options(
-                            g_tol = 1e-5,
-                            x_tol = 1e-6,
-                            f_tol=1e-12); autodiff=:forward).minimizer
-        err_mle[:, s, i] = Y - θhat # Compute errors
+    # General parameters
+    dim_inputs = 1  
+    dim_outputs = length(PriorDraw())
+    MCreps = 1_000      # Number of Monte Carlo samples for each sample size (testing)
+    datareps = 1_000    # Number of repetitions of drawing sample (training)
+    batchsize = 32
+    
+    N = [100 * 2 ^ i for i ∈ 0:5] # Sample sizes
+    dev = gpu
+    testseed = 77
+    trainseed = 78
+    transformseed = 1204
+
+    # RNN-specific parameters
+    dim_hidden = 16
+    rnn_epochs = 1
+
+    # TCN-specific parameters
+    dilation = 2
+    kernel_size = 8
+    channels = 5
+    summ_size = 10 # 'Summarizing size'
+    # Number of layers changes by sample size to obtain a RFS of n (sample size)
+    layers = [ceil(Int, necessary_layers(dilation, kernel_size, n)) for n ∈ N]
+    tcn_epochs = 1 # Use many more epochs than RNN due to fast training speed
+
+    # Obtain datatransformation values for output
+    Random.seed!(transformseed)
+    dtY = fit(ZScoreTransform, dev(PriorDraw(100_000))) # Use a large sample
+
+    # Estimation by ML
+    # ------------------------------------------------------------------------------
+    err_mle = zeros(dim_outputs, MCreps, length(N))
+    # Iterate over different lengths of observed returns
+    # for (i, n) ∈ enumerate(N) 
+    #     @info "Computing MLE for n = $n ..."
+    #     Random.seed!(testseed) # samples for ML and for NN use same seed
+    #     # Fit Logit models by ML on each sample and compute error
+    #     Threads.@threads for s ∈ 1:MCreps
+    #         Y = PriorDraw()
+    #         data = dgp(Y, n)
+    #         obj = θ -> -LogitLikelihood(θ, data)
+    #         θhat = Optim.optimize(obj, zeros(dim_outputs), LBFGS(), # start value is true, to save time 
+    #                             Optim.Options(
+    #                             g_tol = 1e-5,
+    #                             x_tol = 1e-6,
+    #                             f_tol=1e-12); autodiff=:forward).minimizer
+    #         err_mle[:, s, i] = Y - θhat # Compute errors
+    #     end
+    #     @info "ML n = $n done.\n"
+    # end
+    # BSON.@save "$path/results/err_mle_$thisrun.bson" err_mle N
+
+    # --------------------------------------------------------------------------------------
+    # TCN Estimation
+    err_tcn = zeros(dim_outputs, MCreps, length(N))
+    for i ∈ eachindex(N) # Iterate over different sample sizes
+        n = N[i]
+        @info "Computing TCN for n = $n ..."
+        n_layers = layers[i]
+        # Create TCN
+        opt = ADAM()
+        tcn = dev(
+            Chain(
+                TCN(
+                    vcat(dim_inputs, [channels for _ ∈ 1:n_layers], 1), 
+                    kernel_size=kernel_size
+                ),
+                Conv((1, summ_size), 1 => 1, stride=summ_size),
+                Flux.flatten, 
+                Dense(n ÷ summ_size => dim_outputs)
+            )
+        )
+
+        # Train network
+        Random.seed!(trainseed)
+        train_cnn!(tcn, opt, dgp, n, datareps, dtY, batchsize=batchsize, epochs=tcn_epochs,
+            dev=dev, validation_loss=false, verbosity=100)
+        
+        # Test network
+        Random.seed!(testseed)
+        X, Y = map(dev, dgp(n, MCreps))
+        X = tabular2conv(X) # Transform to CNN format
+        # Get NNet estimate of parameters for each sample
+        Flux.testmode!(tcn) # In case net has dropout / batchnorm
+        Ŷ = StatsBase.reconstruct(dtY, tcn(X))
+        err_tcn[:, :, i] = cpu(Y - Ŷ)
+        # Save model as BSON
+        BSON.@save "$path/models/tcn_(n-$n)_$thisrun.bson" tcn
+        # Add to lists for CSV results
+        # push!(n_epochs, tcn_epochs)
+        # push!(sample_size, n)
+        # push!(model, "TCN")
+        # push!(rmse, )
+        # push!(bias, )
+        
+        @info "Temporal convolutional neural network, n = $n done.\n"
     end
-    println("ML n = $n done.")
-end
-BSON.@save "err_mle_$thisrun.bson" err_mle N
+    # Save BSON with results for all sample sizes / models
+    BSON.@save "$path/results/err_tcn_$thisrun.bson" err_tcn N MCreps datareps tcn_epochs
 
-# NNet estimation (nnet object must be pre-trained!)
-# -----------------------------------------------
-Random.seed!(transformseed) # avoid sample contamination for NN training
-dtY = fit(ZScoreTransform, PriorDraw(100000)) # use a large sample for this
+    #---------------------------------------------------------------------------------------
+    # RNN Estimation
+    err_rnn = zeros(dim_outputs, MCreps, length(N))
+    for i ∈ eachindex(N) # Iterate over different sample sizes
+        n = N[i]
+        @info "Computing RNN for n = $n ..."
+        # Create RNN
+        opt = ADAM()
+        rnn = lstm_net(dim_hidden, dim_outputs,dim_inputs, dev)
 
-# Iterate over different lengths of observed returns
-err_nnet = zeros(3, MCreps, length(N))
-Random.seed!(trainseed) # avoid sample contamination for NN training
-Threads.@threads for i = 1:size(N,1)
-    n = N[i]
-    # Create network with 32 hidden nodes
-    nnet = lstm_net(n_hidden, k, g)
-    # Train network
-    opt = ADAM()
-    train_rnn!(nnet, opt, dgp, n, datareps, batchsize, epochs, dtY)
-    # Compute network error on a new batch
-    BSON.@load "bestmodel_$n.bson" m
-    Random.seed!(testseed)
-    X, Y = dgp(n, MCreps) # Generate data according to DGP
-    X = batch_timeseries(X, n, n) # Transform to rnn format
-    # Get NNet estimate of parameters for each sample
-    Flux.testmode!(m) # In case nnet has dropout / batchnorm
-    Flux.reset!(m)
-    m(X[1]) # warmup
-    Yhat = StatsBase.reconstruct(dtY, mean([m(x) for x ∈ X[2:end]]))
-    err_nnet[:, :, i] = Y - Yhat
-    # Save model as BSON
-    println("Neural network, n = $n done.")
-end
-BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps datareps epochs batchsize
+        # Train network
+        Random.seed!(trainseed)
+        train_rnn!(rnn, opt, dgp, n, datareps, dtY, batchsize=batchsize, epochs=rnn_epochs, 
+        dev=dev, validation_loss=false, verbosity=25)
+        
+        # Test network
+        Random.seed!(testseed)
+        X, Y = map(dev, dgp(n, MCreps))
+        X = tabular2rnn(X) # Transform to RNN format
+        # Get NNet estimate of parameters for each sample
+        Flux.testmode!(rnn) # In case net has dropout / batchnorm
+        Flux.reset!(rnn)
+        rnn(X[1]) # Warmup
+        Ŷ = mean(StatsBase.reconstruct(dtY, rnn(x)) for x ∈ X[2:end])
+        err_rnn[:, :, i] = cpu(Y - Ŷ)
+        # Save model as BSON
+        BSON.@save "$path/models/rnn_(n-$n)_$thisrun.bson" rnn
+        
+        @info "Recurrent neural network, n = $n done.\n"
+    end
+    # Save BSON with results for all sample sizes / models
+    BSON.@save "$path/results/err_rnn_$thisrun.bson" err_rnn N MCreps datareps rnn_epochs
 end
 main()
 
