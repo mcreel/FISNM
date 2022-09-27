@@ -40,18 +40,14 @@ function ma2(θ, n)
     e[3:end] .+ θ[1].*e[2:end-1] .+ θ[2].*e[1:end-2]
 end
 
-    
 # generates S samples of length n
-# returns are:
-# x: 1 X S*n vector of data from EGARCH model
-# y: 2 X S*n vector of parameters used to generate each sample
+# formatted for RNN
 @views function dgp(n, S)
     y = PriorDraw(S)     # the parameters for each sample
     x = zeros(1, n*S)    # the Garch data for each sample
     for s = 1:S
         x[:,n*s-n+1:s*n] = ma2(y[:,s], n)
     end
-    Float32.(x), Float32.(y)
-end    
-
-
+    x = [Float32.(x[:, t:n:n*S]) for t ∈ 1:n]
+    x, Float32.(y)
+end
