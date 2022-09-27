@@ -3,7 +3,7 @@ include("LogitLib.jl")
 include("neuralnets.jl")
 
 @views function main()
-whichrun = "working"
+whichrun = "final"
 # General parameters
 MCreps = 5000 # Number of Monte Carlo samples for each sample size
 MCseed = 77
@@ -12,11 +12,11 @@ MCseed = 77
 # to fit longer samples
 base_n = 400
 k = 3 # number of parameters
-BSON.@load "bestmodel_$base_n.bson" m
-BSON.@load "bias_correction.bson" BC N
+BSON.@load "bestmodel_$whichrun$base_n.bson" m
+BSON.@load "bias_correction_$whichrun.bson" BC N
 err_nnet = zeros(k, MCreps, length(N))
 # loop over sample sizes
-for i = 1:size(N,1)
+for i = 5:size(N,1)
     n = N[i]
     Random.seed!(MCseed)
     Yhat = zeros(k, MCreps)
@@ -27,18 +27,25 @@ for i = 1:size(N,1)
         Y[:,rep] = y
         yhat = zeros(3)
         nsplits = 0
-        # fit for each chunk of size base_n
-        for stop in range(start=base_n, stop=n, step=50)
-            nsplits +=1
-            start = stop - base_n + 1
-            xs = x[:,start:stop]
+        if n >= base_n
+            # fit for each chunk of size base_n
+            for stop in range(start=base_n, stop=n, step=50)
+                nsplits +=1
+                start = stop - base_n + 1
+                xs = x[start:stop]
+                Flux.reset!(m)
+                yhat += [m(xs[i]) for i=1:base_n][end]
+            end
+            yhat ./= nsplits .- BC[:,4] # fit is average of fit from each chunk
+                                        # minus BC for n=400
+        else
             Flux.reset!(m)
-            yhat += [m(xs[:,i]) for i=1:base_n][end]
-        end
-        yhat ./= nsplits # fit is average of fit from each chunk
+            yhat = [m(x) for x ∈ x][end] - BC[:,4]
+        end    
+
         Yhat[:,rep] = yhat
     end    
-    err_nnet[:, :, i] = Yhat - Y .- BC[:,4] 
+    err_nnet[:, :, i] = Yhat - Y
 end
 
 BSON.@save "err_splitsample_$whichrun.bson" err_nnet

@@ -1,8 +1,4 @@
+* estimate.jl does MLE and NN. NN is done only up to n=400.
+* SplitSampleEstimate.jl does NN for larger samples, using n=400 as base
 * all results use bias correction
-* SplitSampleEstimate.jl uses n=400 as base, and fits larger samples using it
 
-Takeaways:
-both bias correction and splitting sample work. Splitting sample does not get all the
-way to MLE, but helps. 
-
-In a sub-branch, will go on to explore TCN

@@ -29,16 +29,15 @@ end
 end    
 
 # generates S samples of length n
-# number of parameters is k
-# returns are:
-# x: (k+1)XSn vector of data from logit model
-# y: kXSn vector of parameters used to generate each sample
+# for Logit model, formatted for RNN
 @views function dgp(n, S)
     k = 3 # number of regressors in logit model
     x = zeros(k+1, n*S) # the samples, n obs in each
     y = randn(k, S)     # the parameters, prior is Gaussian N(0,1) for each
+    # stack logit samples of size n  size by size
     for s = 1:S
         x[:,s*n-n+1:s*n] = Logit(y[:,s],n)  
     end
-    Float32.(x), Float32.(y)
-end    
+    x = [Float32.(x[:, t:n:n*S]) for t ∈ 1:n]
+    x, Float32.(y)
+end
