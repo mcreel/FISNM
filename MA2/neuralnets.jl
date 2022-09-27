@@ -12,7 +12,7 @@ Chain(
       Dense(n_hidden, k)
 )
 
-function train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs, thisrun)
+function train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs)
     # size to test data sets
     testsize = 5000
     # create test data
@@ -43,10 +43,11 @@ function train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs, thisrun)
             current = mean(sqrt.(mean(abs2.(Yout - pred),dims=2)))
             if current < bestsofar
                 bestsofar = current
-                BSON.@save "bestmodel_$thisrun$n.bson" m
+                BSON.@save "bestmodel_$n.bson" m
                 println("datarep: $r of $datareps")
                 println("current best: $current")
             end
         end    
     end
+    BSON.@load "bestmodel_$n.bson" m
 end

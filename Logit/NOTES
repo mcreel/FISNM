@@ -1,12 +1,4 @@
-To explore:
-* Slightly more complicated net for larger sample sizes
-* different optimizers, learning rates?
-
-
-to replicate:
-
-* start Julia with julia --proj -t auto
-* include("estimate.jl")
-* include("MakePlots.jl")
-* MakePlots("working")
+* estimate.jl does MLE and NN. NN is done only up to n=400.
+* SplitSampleEstimate.jl does NN for larger samples, using n=400 as base
+* all results use bias correction
 
