@@ -1,8 +1,8 @@
-using Plots, Random, BSON, Optim
-include("LogitLib.jl")
+using Plots, Random, BSON, Flux
+include("MA2lib.jl")
 include("../NN/neuralnets.jl")
 
-@views function main()
+#@views function main()
 whichrun = "final"
 # General parameters
 MCreps = 5000 # Number of Monte Carlo samples for each sample size
@@ -13,9 +13,9 @@ MCseed = 79
 base_n = 400
 BSON.@load "bestmodel_$whichrun$base_n.bson" m
 BSON.@load "bias_correction$whichrun.bson" BC
-BC = BC[:,4] # n=400 is 3rd size tried
-k = 3 # number of parameters
-N = [800, 1600, 3200]  # larger samples to use
+BC = BC[:,3] # n=400 is 3rd size tried
+k = 2 # number of parameters
+N = [800, 1600]  # larger samples to use
 err_nnet = zeros(k, MCreps, length(N))
 # loop over sample sizes
 Threads.@threads for i = 1:size(N,1)
@@ -35,15 +35,17 @@ Threads.@threads for i = 1:size(N,1)
             start = stop - base_n + 1
             xs = x[start:stop]
             Flux.reset!(m)
-            yhat += [m(xs[i]) for i=1:base_n][end]
+            yhat += [m(xs) for x ∈ xs][end]
         end
         yhat ./= nsplits .- BC # fit is average of fit from each chunk
+        display(yhat)
+        display(y)
         Yhat[:,rep] = yhat
     end    
     err_nnet[:, :, i] = Yhat - Y
 end
 
-# BSON.@save "err_splitsample_$whichrun.bson" err_nnet
+BSON.@save "err_splitsample_$whichrun.bson" err_nnet
 
 # Compute squared errors
 err_nnet² = abs2.(err_nnet);
@@ -69,6 +71,6 @@ plot(N, bias_nnet, lw=2, size=(1200, 800), ls=:dash,
 plot!(N, bias_nnet_agg, lab="Aggregate (abs) (NNet)", c=:black, lw=3, ls=:dash)
 savefig("bias_splitsample_$whichrun.png")
 
-end
+#end
 
-main()
+#main()

@@ -3,9 +3,7 @@ using BSON, Plots, Statistics
 function MakePlots(whichrun)
 # Plotting the results
 BSON.@load "err_nnet_$whichrun.bson" err_nnet
-BSON.@load "bias_correction.bson" N BC
-
-
+BSON.@load "bias_correction$whichrun.bson" N
 k = size(err_nnet, 1) # Number of parameters
 # Compute squared errors
 err_nnet² = abs2.(err_nnet);

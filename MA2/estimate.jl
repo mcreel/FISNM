@@ -1,22 +1,22 @@
-using Plots, Random, BSON, Optim
+using Plots, Random, BSON, Optim, Flux
 include("MA2lib.jl")
-include("neuralnets.jl")
+include("../NN/neuralnets.jl")
 
 function main()
-thisrun = "working"
+thisrun = "final"
 # General parameters
 k = 2 # number of labels
 g = 1 # number of features
 n_hidden = 16
 MCreps = 5000 # Number of Monte Carlo samples for each sample size
-BCreps = Int64(10^6)
+BCreps = Int64(10^5)
 datareps = 1000 # number of repetitions of drawing sample
 batchsize = 100
 epochs = 10 # passes over each batch
-N = [50, 100, 200, 400, 800, 1600]  # Sample sizes (most useful to incease by 4X)
-MCseed = 77
+N = [100, 200, 400, 800, 1600]  # Sample sizes (most useful to incease by 4X)
+MCseed = 79
 trainseed = 78
-BCseed = 1024 # bias correction seed
+BCseed = 80 # bias correction seed
 
 # NNet estimation (nnet object must be pre-trained!)
 # -----------------------------------------------
@@ -27,15 +27,14 @@ Random.seed!(trainseed) # avoid sample contamination for NN training
 Threads.@threads for i = 1:size(N,1)
     n = N[i]
     # Create network with 32 hidden nodes
-    nnet = lstm_net(n_hidden, k, g)
+    m = lstm_net(n_hidden, k, g)
     # Train network
     opt = ADAM()
-    train_rnn!(nnet, opt, dgp, n, datareps, batchsize, epochs)
+    train_rnn!(m, opt, dgp, n, datareps, batchsize, epochs)
     # Compute network error on a new batch
-    BSON.@load "bestmodel_$n.bson" m
     # bias correction
     Random.seed!(BCseed)
-    X, Y = dgp(n, 100000) # Generate data according to DGP
+    X, Y = dgp(n, BCreps) # Generate data according to DGP
     Flux.testmode!(m) # In case nnet has dropout / batchnorm
     Flux.reset!(m)
     Yhat = [m(x) for x ∈ X][end]
@@ -46,13 +45,12 @@ Threads.@threads for i = 1:size(N,1)
     # Get NNet fit, with bias correction
     Flux.testmode!(m) # In case nnet has dropout / batchnorm
     Flux.reset!(m)
-    m(X[1]) # warmup
-    Yhat = [m(x) for x ∈ X[2:end]][end] .- BC[:,i]
+    Yhat = [m(x) for x ∈ X][end] .- BC[:,i]
     err_nnet[:, :, i] = Yhat - Y 
     # Save model as BSON
     println("Neural network, n = $n done.")
 end
-BSON.@save "bias_correction.bson" BC N
+BSON.@save "bias_correction$thisrun.bson" BC N
 BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps datareps epochs batchsize
 end
 main()

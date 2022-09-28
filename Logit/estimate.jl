@@ -10,7 +10,7 @@ k = 3 # number of labels
 g = 4 # number of features
 n_hidden = 16
 MCreps = 5000 # Number of Monte Carlo samples for each sample size
-BCreps = Int64(10^6)
+BCreps = Int64(10^5)
 datareps = 1000 # number of repetitions of drawing sample
 batchsize = 100
 epochs = 10 # passes over each batch
@@ -77,7 +77,7 @@ Threads.@threads for i = 1:4
     # Save model as BSON
     println("Neural network, n = $n done.")
 end
-BSON.@save "bias_correction_$thisrun.bson" BC N
+BSON.@save "bias_correction$thisrun.bson" BC N
 BSON.@save "err_nnet_$thisrun.bson" err_nnet N MCreps datareps epochs batchsize
 end
 main()
