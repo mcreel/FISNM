@@ -3,9 +3,6 @@ using BSON, Plots, Statistics
 function MakePlots(whichrun)
 # Plotting the results
 BSON.@load "err_nnet_$whichrun.bson" err_nnet
-BSON.@load "bias_correction_$whichrun.bson" N BC
-N = N[1:4,:]
-err_nnet = err_nnet[:,:,1:4]
 k = size(err_nnet, 1) # Number of parameters
 # Compute squared errors
 err_nnet² = abs2.(err_nnet);
@@ -24,26 +21,10 @@ savefig("rmse_benchmark_$whichrun.png")
 # Compute bias for each individual parameter
 bias_nnet = permutedims(reshape(mean(err_nnet, dims=2), k, length(N)));
 # Compute bias aggregate
-<<<<<<< HEAD
-bias_mle_agg = mean(abs.(bias_mle), dims=2);
-bias_nnet_agg = mean(abs.(bias_nnet), dims=2);
-
-plot(N, bias_mle, xlab="Number of observations", ylab="Bias", size=(1200, 800), 
-    lw=2, lab=map(x -> x * " (MLE)", ["p1" "p2" "p3" "p4" "p5"]),
-    color=colors)
-plot!(N, bias_mle_agg, lab="Aggregate (abs) (MLE)", c=:black, lw=3)
-
-plot!(N, bias_nnet, lw=2, ls=:dash, 
-    lab=map(x -> x * " (NNet)", ["p1" "p2" "p3" "p4" "p5"]),
-    color=colors)
-plot!(N, bias_nnet_agg, lab="Aggregate (abs) (NNet)", c=:black, lw=3, ls=:dash)
-
-=======
 bias_nnet_agg = mean(abs.(bias_nnet), dims=2);
 plot(N, bias_nnet, lw=2, ls=:dash, 
     lab=map(x -> x * " (NNet)", ["p1" "p2" "p3" "p4" "p5"]),
     color=colors)
 plot!(N, bias_nnet_agg, lab="Aggregate (abs) (NNet)", c=:black, lw=3, ls=:dash)
->>>>>>> logitdgpfix
 savefig("bias_benchmark_$whichrun.png")
 end
