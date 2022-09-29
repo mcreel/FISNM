@@ -2,6 +2,21 @@ using BSON, Plots, Statistics
 
 function MakePlots(whichrun)
 
+# MLE fit
+BSON.@load "err_mle_$whichrun.bson" err_mle N
+k = size(err_mle, 1) # Number of parameters
+# Compute squared errors
+err_mle² = abs2.(err_mle)
+# Compute RMSE for each individual parameter
+rmse_mle = permutedims(reshape(sqrt.(mean(err_mle², dims=2)), k, length(N)))
+# Compute RMSE aggregate
+rmse_mle_agg = mean(rmse_mle, dims=2)
+# Compute bias for each individual parameter
+bias_mle = permutedims(reshape(mean(err_mle, dims=2), k, length(N)))
+# Compute bias aggregate
+bias_mle_agg = mean(abs.(bias_mle), dims=2)
+N_mle = N
+
 # normal fit
 BSON.@load "err_nnet_$whichrun.bson" err_nnet N
 k = size(err_nnet, 1) # Number of parameters
@@ -42,6 +57,10 @@ plot!(N_ss, rmse_ss, lw=2, ls=:dot,
     lab=map(x -> x * " (ss)", ["p1" "p2" "p2" "p4" "p5"]),
     color=colors)
 plot!(N_ss, rmse_ss_agg, lab="Aggregate (ss)", c=:black, lw=3, ls=:dot)
+plot!(N_mle, rmse_mle, lw=2, ls=:solid, 
+    lab=map(x -> x * " (MLE)", ["p1" "p2" "p2" "p4" "p5"]),
+    color=colors)
+plot!(N_mle, rmse_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3, ls=:solid)
 savefig("rmse_benchmark_$whichrun.png")
 
 plot(N_nnet, bias_nnet, lw=2, ls=:dash, 
@@ -52,5 +71,9 @@ plot!(N_ss, bias_ss, lw=2, ls=:dot,
     lab=map(x -> x * " (ss)", ["p1" "p2" "p3" "p4" "p5"]),
     color=colors)
 plot!(N_ss, bias_ss_agg, lab="Aggregate (abs) (ss)", c=:black, lw=3, ls=:dot)
+plot!(N_mle, bias_mle, lw=2, ls=:solid, 
+    lab=map(x -> x * " (MLE)", ["p1" "p2" "p2" "p4" "p5"]),
+    color=colors)
+plot!(N_mle, bias_mle_agg, lab="Aggregate (MLE)", c=:black, lw=3, ls=:solid)
 savefig("bias_benchmark_$whichrun.png")
 end
