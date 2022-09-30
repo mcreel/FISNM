@@ -44,13 +44,13 @@ end
     
 # generates S samples of length n
 # returns are:
-# x: 1 X S*n vector of data from EGARCH model
-# y: 2 X S*n vector of parameters used to generate each sample
+# x: (k=1 × S × n) array of data from MA2 model
+# y: (p=2 × S) array of parameters used to generate each sample
 @views function dgp(n, S)
     y = PriorDraw(S)     # the parameters for each sample
-    x = zeros(n, S)    # the Garch data for each sample
+    x = zeros(1, S, n)    # the Garch data for each sample
     for s = 1:S
-        x[:,s] = ma2(y[:,s], n)
+        x[1,s,:] = ma2(y[:,s], n)
     end
     Float32.(x), Float32.(y)
 end    

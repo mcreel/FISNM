@@ -31,11 +31,11 @@ function PriorDraw(n)
 end    
 # generates S samples of length n
 # returns are:
-# x: 1 X S*n vector of data from EGARCH model
-# y: 3 X S*n vector of parameters used to generate each sample
+# x: (k=1 × S × n) array of data from EGARCH model
+# y: (p=3 × S) array of parameters used to generate each sample
 @views function dgp(n, S)
-    y = zeros(3, S)     # the parameters for each sample
-    x = zeros(n, S)    # the Garch data for each sample
+    y = zeros(3, S)    # the parameters for each sample
+    x = zeros(1, S, n)    # the Garch data for each sample
     for s = 1:S
         # the parameter vector
         θ = PriorDraw()
@@ -45,7 +45,7 @@ end
         α = (1.0 - share)*βplusα
         # get y and x for the sample s
         y[:,s] = θ
-        x[:,s] = SimulateGarch11(θ, n)
+        x[1,s,:] = SimulateGarch11(θ, n)
     end
     Float32.(x), Float32.(y)
 end    

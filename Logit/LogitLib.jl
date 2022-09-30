@@ -23,22 +23,25 @@ end
 # each column is a vector of regressors, plus the 0/1 outcome in last row
 @views function Logit(θ, n)
     k = size(θ,1)
-    data = randn(k+1,n)
-    data[k+1,:] = rand(1,n) .< 1.0 ./(1. .+ exp.(-θ'*data[1:k,:]))
+    data = randn(k+1,1,n)
+    data[k+1,1,:] = rand(1,n) .< (1.0 ./(1. .+ exp.(-θ'*data[1:k,1,:])))
     data
 end    
 
 # generates S samples of length n
 # number of parameters is k
 # returns are:
-# x: (k+1)XSn vector of data from logit model
-# y: kXSn vector of parameters used to generate each sample
+# x: (k+1=4 × S × n) array of data from Logit model
+# y: (k=3 × S) array of parameters used to generate each sample
 @views function dgp(n, S)
     k = 3 # number of regressors in logit model
-    x = zeros(k+1, n*S) # the samples, n obs in each
+    x = zeros(k+1, S, n) # the samples, n obs in each
     y = randn(k, S)     # the parameters, prior is Gaussian N(0,1) for each
     for s = 1:S
-        x[:,s] = Logit(y[:,s],n)  
+        x[:,s,:] = Logit(y[:,s],n)  
     end
     Float32.(x), Float32.(y)
 end    
+
+
+X, Y = dgp(5, 10)

@@ -1,9 +1,9 @@
 using Flux
 using StatsBase
 
-# Some helpers
-tabular2rnn(X) = [view(X, i:i, :) for i ∈ 1:size(X, 1)]
-tabular2conv(X) = permutedims(reshape(X, size(X)..., 1, 1), (4, 1, 3, 2))
+# Transform (K × S × T) arrays to RNN or CNN format
+tabular2rnn(X) = [view(X, :, :, i) for i ∈ axes(X, 3)]
+tabular2conv(X) = permutedims(reshape(X, size(X)..., 1), (4, 3, 1, 2))
 
 # In the following losses, Ŷ is always the sequence of predictions
 # RMSE on last item only
