@@ -12,7 +12,7 @@ include("../samin.jl")
 function main()
     # Save individual BSONs with errors, models, MCreps, datareps and epochs for each model / sample size
 
-    thisrun = "experiment"
+    thisrun = "0930"
     path = "MA2"
 
     # General parameters
@@ -22,7 +22,7 @@ function main()
     datareps = 1_000    # Number of repetitions of drawing sample (training)
     batchsize = 32
     
-    N = [100 * 2 ^ i for i ∈ 0:0] # Sample sizes
+    N = [100 * 2 ^ i for i ∈ 0:5] # Sample sizes
     dev = gpu
     testseed = 77
     trainseed = 78
@@ -40,7 +40,7 @@ function main()
     # TCN-specific parameters
     dilation = 2
     kernel_size = 8
-    channels = 5
+    channels = 16
     summ_size = 10 # 'Summarizing size'
     # Number of layers changes by sample size to obtain a RFS of n (sample size)
     layers = [ceil(Int, necessary_layers(dilation, kernel_size, n)) for n ∈ N]
@@ -50,24 +50,26 @@ function main()
     Random.seed!(transformseed)
     dtY = fit(ZScoreTransform, dev(PriorDraw(100_000))) # Use a large sample
 
-    # --------------------------------------------------------------------------------------
-    # MLE Estimation
-    err_mle = zeros(dim_outputs, MCreps, length(N))
-    for i ∈ eachindex(N) # Iterate over different sample sizes
-        n = N[i]
-        @info "Compute MLE for n = $n ..."
-        Random.seed!(testseed)
-        X, Y = dgp(n, MCreps)
-        Threads.@threads for s ∈ 1:MCreps
-            obj = θ -> -(1.0 / n) * lnL(θ, X[:, s])
-            Ŷ, _, _, _ = samin(obj, Ystart, lb, ub, rt=0.25, functol=1e-5, paramtol=1e-4, verbosity=0)
-            err_mle[:, s, i] = Y[:, s] - Ŷ[1:2]
-        end
+    # # --------------------------------------------------------------------------------------
+    # # MLE Estimation
+    # err_mle = zeros(dim_outputs, MCreps, length(N))
+    # for i ∈ eachindex(N) # Iterate over different sample sizes
+    #     n = N[i]
+    #     @info "Compute MLE for n = $n ..."
+    #     Random.seed!(testseed)
+    #     X, Y = dgp(n, MCreps)
+    #     # Change X to be n × S
+    #     X = reshape(permutedims(X, (3, 2, 1)), n, MCreps)
+    #     Threads.@threads for s ∈ 1:MCreps
+    #         obj = θ -> -(1.0 / n) * lnL(θ, X[:, s])
+    #         Ŷ, _, _, _ = samin(obj, Ystart, lb, ub, rt=0.25, functol=1e-5, paramtol=1e-4, verbosity=0)
+    #         err_mle[:, s, i] = Y[:, s] - Ŷ[1:2]
+    #     end
 
-        @info "Maximum likelihood estimation, n = $n done.\n"
-    end
-    # Save BSON with results for all sample sizes / models
-    BSON.@save "$path/results/err_mle_$thisrun.bson" err_mle N MCreps datareps rnn_epochs
+    #     @info "Maximum likelihood estimation, n = $n done.\n"
+    # end
+    # # Save BSON with results for all sample sizes / models
+    # BSON.@save "$path/results/err_mle_$thisrun.bson" err_mle N MCreps datareps
 
     # --------------------------------------------------------------------------------------
     # TCN Estimation
