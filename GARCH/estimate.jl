@@ -9,7 +9,7 @@ include("../samin.jl")
 
 function main()
 
-    thisrun = "0925"
+    thisrun = "0930"
     path = "GARCH"
 
     # General parameters
@@ -55,6 +55,8 @@ function main()
         @info "Compute MLE for n = $n ..."
         Random.seed!(testseed)
         X, Y = dgp(n, MCreps)
+        # Change X to be n × S
+        X = reshape(permutedims(X, (3, 2, 1)), n, MCreps)
         # Fit GARCH models by ML on each sample and compute error
         Threads.@threads for s ∈ 1:MCreps
             θstart = Float64.([0.5, 0.5, 0.5])

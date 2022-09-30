@@ -90,7 +90,7 @@ function train_rnn!(
     Flux.trainmode!(m) # In case we have dropout / batchnorm
     θ = Flux.params(m) # Extract parameters
     best_model = deepcopy(m)
-    best_loss = 1e10
+    best_loss = Inf
     # Create a validation set to compute and keep track of losses
     if validation_loss
         Xv, Yv = map(dev, dgp(n, S))
@@ -111,7 +111,7 @@ function train_rnn!(
         for idx ∈ Iterators.partition(1:S, batchsize)
             Flux.reset!(m)
             # Extract batch, transform features to format for RNN
-            Xb, Yb = tabular2rnn(X[:, idx]), Y[:, idx]
+            Xb, Yb = tabular2rnn(X[:, idx, :]), Y[:, idx]
             # Compute loss and gradients
             if bidirectional # Special case for bidirectional RNN
                 ∇ = gradient(θ) do
