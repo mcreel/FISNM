@@ -7,14 +7,16 @@ include("LogitLib.jl")
 include("../neuralnets.jl")
 include("../TCN.jl")
 
+
+## NOTE: We do not do MLE for Logit, this is done in GRETL
 function main()
     # Save individual BSONs with errors, models, MCreps, datareps and epochs for each model / sample size
 
-    thisrun = "experiment"
+    thisrun = "1003"
     path = "Logit"
 
     # General parameters
-    dim_inputs = 1  
+    dim_inputs = 4
     dim_outputs = length(PriorDraw())
     MCreps = 1_000      # Number of Monte Carlo samples for each sample size (testing)
     datareps = 1_000    # Number of repetitions of drawing sample (training)
@@ -28,43 +30,20 @@ function main()
 
     # RNN-specific parameters
     dim_hidden = 16
-    rnn_epochs = 1
+    rnn_epochs = 10
 
     # TCN-specific parameters
     dilation = 2
     kernel_size = 8
-    channels = 5
+    channels = 16
     summ_size = 10 # 'Summarizing size'
     # Number of layers changes by sample size to obtain a RFS of n (sample size)
     layers = [ceil(Int, necessary_layers(dilation, kernel_size, n)) for n ∈ N]
-    tcn_epochs = 1 # Use many more epochs than RNN due to fast training speed
+    tcn_epochs = 10 # Use many more epochs than RNN due to fast training speed
 
     # Obtain datatransformation values for output
     Random.seed!(transformseed)
     dtY = fit(ZScoreTransform, dev(PriorDraw(100_000))) # Use a large sample
-
-    # Estimation by ML
-    # ------------------------------------------------------------------------------
-    err_mle = zeros(dim_outputs, MCreps, length(N))
-    # Iterate over different lengths of observed returns
-    # for (i, n) ∈ enumerate(N) 
-    #     @info "Computing MLE for n = $n ..."
-    #     Random.seed!(testseed) # samples for ML and for NN use same seed
-    #     # Fit Logit models by ML on each sample and compute error
-    #     Threads.@threads for s ∈ 1:MCreps
-    #         Y = PriorDraw()
-    #         data = dgp(Y, n)
-    #         obj = θ -> -LogitLikelihood(θ, data)
-    #         θhat = Optim.optimize(obj, zeros(dim_outputs), LBFGS(), # start value is true, to save time 
-    #                             Optim.Options(
-    #                             g_tol = 1e-5,
-    #                             x_tol = 1e-6,
-    #                             f_tol=1e-12); autodiff=:forward).minimizer
-    #         err_mle[:, s, i] = Y - θhat # Compute errors
-    #     end
-    #     @info "ML n = $n done.\n"
-    # end
-    # BSON.@save "$path/results/err_mle_$thisrun.bson" err_mle N
 
     # --------------------------------------------------------------------------------------
     # TCN Estimation
@@ -102,12 +81,6 @@ function main()
         err_tcn[:, :, i] = cpu(Y - Ŷ)
         # Save model as BSON
         BSON.@save "$path/models/tcn_(n-$n)_$thisrun.bson" tcn
-        # Add to lists for CSV results
-        # push!(n_epochs, tcn_epochs)
-        # push!(sample_size, n)
-        # push!(model, "TCN")
-        # push!(rmse, )
-        # push!(bias, )
         
         @info "Temporal convolutional neural network, n = $n done.\n"
     end

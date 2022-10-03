@@ -42,6 +42,3 @@ end
     end
     Float32.(x), Float32.(y)
 end    
-
-
-X, Y = dgp(5, 10)
