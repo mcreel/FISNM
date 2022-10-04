@@ -33,7 +33,7 @@ bias_nnet_agg = mean(abs.(bias_nnet), dims=2)
 N_nnet = N[1:4]
 
 # split sample fit
-BSON.@load "err_splitsample_$whichrun.bson" err_nnet N
+BSON.@load "err_splitsample_base50.bson" err_nnet N
 k = size(err_nnet, 1) # Number of parameters
 # Compute squared errors
 err_nnet² = abs2.(err_nnet);

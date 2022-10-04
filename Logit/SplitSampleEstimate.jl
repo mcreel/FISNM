@@ -3,22 +3,22 @@ include("LogitLib.jl")
 include("../NN/neuralnets.jl")
 
 @views function main()
-whichrun = "final"
+whichrun = "base50"
 # General parameters
 MCreps = 5000 # Number of Monte Carlo samples for each sample size
 MCseed = 77
 
 # use a model trained with samples of size n
 # to fit longer samples
-base_n = 400
-BSON.@load "bestmodel_$whichrun$base_n.bson" m
-BSON.@load "bias_correction$whichrun.bson" BC
-BC = BC[:,4] # n=400 is 4th size tried
+base_n = 50
+BSON.@load "bestmodel_final$base_n.bson" m
+BSON.@load "bias_correctionfinal.bson" BC
+BC = BC[:,1]
 k = 3 # number of parameters
-N = [800, 1600, 3200]  # larger samples to use
+N = [50, 100, 200, 400, 800, 1600, 3200]  # larger samples to use
 err_nnet = zeros(k, MCreps, length(N))
 # loop over sample sizes
-for i = 1:size(N,1)
+Threads.@threads for i = 1:size(N,1)
     n = N[i]
     Random.seed!(MCseed)
     Yhat = zeros(k, MCreps)
