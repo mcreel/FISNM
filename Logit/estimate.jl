@@ -30,7 +30,7 @@ function main()
 
     # RNN-specific parameters
     dim_hidden = 16
-    rnn_epochs = 10
+    rnn_epochs = 200
 
     # TCN-specific parameters
     dilation = 2
@@ -39,7 +39,7 @@ function main()
     summ_size = 10 # 'Summarizing size'
     # Number of layers changes by sample size to obtain a RFS of n (sample size)
     layers = [ceil(Int, necessary_layers(dilation, kernel_size, n)) for n ∈ N]
-    tcn_epochs = 10 # Use many more epochs than RNN due to fast training speed
+    tcn_epochs = 5_000 # Use many more epochs than RNN due to fast training speed
 
     # Obtain datatransformation values for output
     Random.seed!(transformseed)
