@@ -41,7 +41,6 @@ function ma2(θ, n)
     e[3:end] .+ θ[1].*e[2:end-1] .+ θ[2].*e[1:end-2]
 end
 
-    
 # generates S samples of length n
 # returns are:
 # x: (k=1 × S × n) array of data from MA2 model
@@ -53,27 +52,4 @@ end
         x[1,s,:] = ma2(y[:,s], n)
     end
     Float32.(x), Float32.(y)
-end    
-
-
-function Σ(n, θ)
-    θ1, θ2, θ3 = θ 
-    Σ = zeros(n,n)
-    for i = 1:n
-        Σ[i,i] = 1. + θ1^2. + θ2^2.
-    end    
-    for i = 1:n-1    
-        Σ[i,i+1] = θ1+θ1*θ2
-        Σ[i+1,i] = θ1+θ1*θ2
-    end
-    for i = 1:n-2    
-        Σ[i, i+2] = θ2
-        Σ[i+2,i] = θ2
-    end
-    Σ .* θ3
-end
-
-function lnL(θ, data)
-    n = size(data,1)
-    InSupport(θ) ? log(pdf(MvNormal(zeros(n), Σ(n,θ)), data))[1] : -Inf
 end

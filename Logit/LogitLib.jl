@@ -37,8 +37,9 @@ end
     k = 3 # number of regressors in logit model
     x = zeros(k+1, S, n) # the samples, n obs in each
     y = randn(k, S)     # the parameters, prior is Gaussian N(0,1) for each
+    # stack logit samples of size n  size by size
     for s = 1:S
         x[:,s,:] = Logit(y[:,s],n)  
     end
     Float32.(x), Float32.(y)
-end    
+end

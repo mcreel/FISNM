@@ -1,5 +1,2 @@
-* currently, the GARCH model is only one using the up-to-date methods. The others will need to be
-  updated
-* the garch code can possibly  train a single RNN that can predict using sequences (sample sizes) of any length.
-    in the training part, generate samples of random size
-* the code now uses threading over the loops
+* MA2 and Logit are up to data for RNN. Uses bias correction an split sample for large n.
+* GARCH is out of date
