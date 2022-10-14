@@ -10,47 +10,6 @@ function calibrate()
     f = fit(GARCH{1,1}, data;  meanspec=AR{1})
 end
 
-# draw the params from their priors. Model
-# is parameterized in terms of long run variance,
-# beta+alpha, and beta's share of beta+alpha
-function PriorDraw()
-    # long run variance
-    lrv = 0.0001 + 0.9999*rand()
-    βplusα = 0.99*rand()
-    share = rand()
-    [lrv, βplusα, share]
-end
-
-# get a set of draws from prior
-function PriorDraw(n)
-    draws = zeros(3,n)
-    for i = 1:n
-        draws[:,i] .= PriorDraw()
-    end
-    draws
-end    
-# generates S samples of length n
-# returns are:
-# x: (k=1 × S × n) array of data from EGARCH model
-# y: (p=3 × S) array of parameters used to generate each sample
-@views function dgp(n, S)
-    y = zeros(3, S)    # the parameters for each sample
-    x = zeros(1, S, n)    # the Garch data for each sample
-    for s = 1:S
-        # the parameter vector
-        θ = PriorDraw()
-        lrv, βplusα , share  = θ
-        ω = (1.0 - βplusα)*lrv
-        β = share*βplusα
-        α = (1.0 - share)*βplusα
-        # get y and x for the sample s
-        y[:,s] = θ
-        x[1,s,:] = SimulateGarch11(θ, n)
-    end
-    Float32.(x), Float32.(y)
-end    
-
-
 # the likelihood function, alternative version with reparameterization
 @views function SimulateGarch11(θ, n)
     burnin = 0

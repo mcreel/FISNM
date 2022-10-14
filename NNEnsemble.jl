@@ -32,19 +32,3 @@ Flux.trainmode!(e::TCNEnsemble) = [Flux.trainmode!(m) for m ∈ e.models]
 Flux.testmode!(e::TCNEnsemble) = [Flux.testmode!(m) for m ∈ e.models]
 
 (e::TCNEnsemble)(X) = mean(m(X) for m ∈ e.models)
-
-ensemble = TCNEnsemble(
-    [dev(
-        Chain(
-            TCN(
-                vcat(dim_inputs, [channels for _ ∈ 1:n_layers], 1), 
-                kernel_size=kernel_size
-            ),
-            Conv((1, summ_size), 1 => 1, stride=summ_size),
-            Flux.flatten, 
-            Dense(n ÷ summ_size => dim_outputs)
-        )
-    ) for _ ∈ 1:5],
-    [ADAM() for _ ∈ 1:5]
-);
-

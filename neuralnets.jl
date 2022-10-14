@@ -166,36 +166,38 @@ function train_rnn!(
     if validation_loss
         losses, best_model
     else
-        nothing
+        nothing, nothing
     end
 end
 
 # Train a convolutional neural network
 function train_cnn!(
-    m, opt, dgp, n, dtY;
-    epochs=1000, batchsize=32, passes_per_batch=10, dev=cpu, loss=mse_conv,
-    validation_loss=true, validation_frequency=10, validation_size=2000, verbosity=1, 
+    m, opt, dgp, dtY;
+    epochs=1000, batchsize=32, passes_per_batch=10, dev=cpu, loss=rmse_conv,
+    validation_loss=true, validation_frequency=10, validation_size=2_000, verbosity=1, 
     transform=true
 )
-    Flux.trainmode!(m) # In case we have dropout / batchnorm
+    Flux.trainmode!(m) # In case we have dropout / layer normalization
     θ = Flux.params(m) # Extract parameters
-    best_model = deepcopy(m)
+    best_model = deepcopy(m) 
     best_loss = Inf
+
     # Create a validation set to compute and keep track of losses
     if validation_loss
-        Xv, Yv = map(dev, dgp(n, validation_size))
-        # transform && StatsBase.transform!(dtY, Yv) # want to see validation RMSE on original scale
+        Xv, Yv = generate(dgp, validation_size, dev=dev)
+        # Want to see validation RMSE on original scale => no rescaling
         Xv = tabular2conv(Xv)
         losses = zeros(epochs)
     end
+
     # Iterate over training epochs
     for epoch ∈ 1:epochs
-        X, Y = map(dev, dgp(n, batchsize)) # Generate a new batch
-        transform ? StatsBase.transform!(dtY, Y) : nothing
+        X, Y = generate(dgp, batchsize, dev=dev) # Generate a new batch
+        transform && StatsBase.transform!(dtY, Y)
         # Transform features to format for CNN
         X = tabular2conv(X)
-        # ----- training ---------------------------------------------
-        for i = 1:passes_per_batch
+        # ----- Training ---------------------------------------------
+        for _ ∈ 1:passes_per_batch
             # Compute loss and gradients
             ∇ = gradient(θ) do
                 Ŷ = m(X)
@@ -206,7 +208,7 @@ function train_cnn!(
         # Compute validation loss and print status if verbose
         if validation_loss && mod(epoch, validation_frequency)==0
             Flux.testmode!(m)
-            transform ? Ŷ = StatsBase.reconstruct(dtY, m(Xv)) : Ŷ = m(Xv)
+            Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
             current_loss = loss(Ŷ, Yv)
             if current_loss < best_loss
                 best_loss = current_loss
