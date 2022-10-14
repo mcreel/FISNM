@@ -1,3 +1,4 @@
+using Distributions
 using Random
 
 # use rejection sampling to stay inside 
@@ -41,13 +42,14 @@ function ma2(θ, n)
 end
 
 # generates S samples of length n
-# formatted for RNN
-@views function dgp(n, S, dornn=true)
+# returns are:
+# x: (k=1 × S × n) array of data from MA2 model
+# y: (p=2 × S) array of parameters used to generate each sample
+@views function dgp(n, S)
     y = PriorDraw(S)     # the parameters for each sample
-    x = zeros(1, n*S)    # the Garch data for each sample
+    x = zeros(1, S, n)    # the Garch data for each sample
     for s = 1:S
-        x[:,n*s-n+1:s*n] = Float32.(ma2(y[:,s], n))
+        x[1,s,:] = ma2(y[:,s], n)
     end
-    dornn ? x = [Float32.(x[:, t:n:n*S]) for t ∈ 1:n] : nothing
-    x, Float32.(y)
+    Float32.(x), Float32.(y)
 end
