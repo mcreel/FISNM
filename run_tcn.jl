@@ -15,7 +15,7 @@ function main()
 
     for (k, v) ∈ DGPs
         @info "Training $k DGP."
-        train_tcn(DGPFunc=v, N=N, modelname=k, runname=runname, epochs=2)
+        train_tcn(DGPFunc=v, N=N, modelname=k, runname=runname)
     end
 end
 
