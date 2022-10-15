@@ -1,7 +1,11 @@
 include("DGPs.jl") # Include all DGPs
-include("neuralnets.jl")
+include("neuralnets.jl") 
+include("NNEnsemble.jl") 
 
-function train_tcn(; 
+# Notice that there is no "err_best" for the TCNEnsemble. TCNEnsemble automatically updates
+# the underlying models to be the best ones when validation_loss is true
+
+function train_tcn_ensemble(;     
     DGPFunc, N, modelname, runname,
     # Sizes and seeds
     validation_size = 2_000,     # The samples used to keep track of the 'best' model when training
@@ -37,22 +41,20 @@ function train_tcn(;
 
     # Create arrays for error tracking
     err = zeros(n_params(dgp), test_size, length(N))
-    err_best = similar(err)
 
     for (i, n) ∈ enumerate(N)
-        @info "Training TCN for n = $n"
+        @info "Training Ensemble for n = $n"
         # Create the DGP
         dgp = DGPFunc(N=n)
 
         # Create the TCN for the DGP
-        model = build_tcn(dgp, dilation=dilation, kernel_size=kernel_size, channels=channels,
-            summary_size=summary_size, dev=dev)
-        opt = ADAM()
+        model = build_tcn_ensemble(dgp, ADAM, dilation=dilation, kernel_size=kernel_size, 
+            channels=channels, summary_size=summary_size, dev=dev)
 
         # Train the network
         Random.seed!(train_seed)
-        _, best_model = train_cnn!(
-            model, opt, dgp, dtY, epochs=epochs, batchsize=batchsize, dev=dev, 
+        train_ensemble!(
+            model, dgp, dtY, epochs=epochs, batchsize=batchsize, dev=dev, 
             passes_per_batch=passes_per_batch, validation_size=validation_size,
             validation_frequency = validation_frequency, verbosity=verbosity, loss=loss
         )
@@ -66,18 +68,12 @@ function train_tcn(;
         Ŷ = StatsBase.reconstruct(dtY, model(X))
         err[:, :, i] = cpu(Ŷ - Y)
         rmse = sqrt.(mean(abs2.(err[:, :, i]), dims=2))
-        if validation_loss
-            Flux.testmode!(best_model)
-            Ŷb = StatsBase.reconstruct(dtY, best_model(X))
-            err_best[:, :, i] = cpu(Ŷb - Y)
-            rmse = sqrt.(mean(abs2.(err_best[:, :, i]), dims=2))
-        end
         # Save model as BSON
-        BSON.@save "models/$modelname/$(runname)_(n-$n).bson" model best_model
+        BSON.@save "models/$modelname/$(runname)_(n-$n).bson" model
 
-        @info "TCN (n = $n) done." rmse
+        @info "TCNEnsemble (n = $n) done." rmse
     end
 
     # Save BSON with results for all sample sizes / models
-    BSON.@save "results/$modelname/err_$runname.bson" err err_best
+    BSON.@save "results/$modelname/err_$runname.bson" err 
 end

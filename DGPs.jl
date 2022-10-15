@@ -2,6 +2,7 @@ include("GARCH/GarchLib.jl")
 include("MA2/MA2Lib.jl")
 include("Logit/LogitLib.jl")
 include("TCN.jl")
+include("NNEnsemble.jl")
 
 
 abstract type DGP end
@@ -114,5 +115,17 @@ function build_tcn(d::DGP; dilation=2, kernel_size=8, channels=16, summary_size=
             Flux.flatten,
             Dense(d.N ÷ summary_size => dim_out)
         )
+    )
+end
+
+# Build TCNEnsemble for a particular DGP
+function build_tcn_ensemble(
+    d::DGP, opt_func, n_models::Int=10; 
+    dilation=2, kernel_size=8, channels=16, summary_size=10, dev=cpu
+)
+    TCNEnsemble(
+        [build_tcn(d, dilation=dilation, kernel_size=kernel_size, channels=channels,
+            summary_size=summary_size, dev=dev) for _ ∈ 1:n_models],
+        [opt_func() for _ ∈ 1:n_models]
     )
 end

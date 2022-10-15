@@ -10,12 +10,12 @@ function main()
         "MA2" => Ma2, 
         "Logit" => Logit
     )
-    N = [100 * 2^i for i ∈ 0:0]
-    runname = "test"
+    N = [100 * 2^i for i ∈ 0:5]
+    runname = "tcn-1510"
 
     for (k, v) ∈ DGPs
         @info "Training $k DGP."
-        train_tcn(DGPFunc=v, N=N, modelname=k, runname=runname)
+        train_tcn(DGPFunc=v, N=N, modelname=k, runname=runname, epochs=2)
     end
 end
 
