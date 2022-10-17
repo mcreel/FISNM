@@ -1,15 +1,3 @@
-function insupport(θ)
-    θ1, θ2 = θ
-    all([
-         (θ2+θ1 > -1.0), 
-         (θ2-θ1 > -1.0), 
-         (θ1>-2.0),
-         (θ1 < 2.0),
-         (θ2 > -1.0),
-         (θ2 < 1.0)
-        ])
-end
-
 function LogitLikelihood(θ, data)
     x = data[1:end-1,:]'
     y = data[end,:]
