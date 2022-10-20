@@ -1,0 +1,2 @@
+* MA2 and Logit are up to data for RNN. Uses bias correction an split sample for large n.
+* GARCH is out of date
