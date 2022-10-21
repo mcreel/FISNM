@@ -1,24 +1,24 @@
-using Term, PrettyTables
+using Term, PrettyTables, DelimitedFiles
 include("DGPs.jl") # Include all DGPs
 include("neuralnets.jl")
 
 function train_tcn(; 
     DGPFunc, N, modelname, runname,
     # Sizes and seeds
-    validation_size = 5_000,     # The samples used to keep track of the 'best' model when training
+    validation_size = 2_000,     # The samples used to keep track of the 'best' model when training
     test_size = 5_000,           # The samples used to evaluate the final model
     transform_size = 100_000,    # The samples used in the data transformation of parameters
     train_seed = 77,             # The random seed for training
     test_seed = 78,              # The random seed for final model evaluation
     transform_seed = 1204,       # The random seed for the prior draw of the data transformation
 
-    # Training parameters: THIS IS SET SO THAT TRAINING SAMPLES ARE 10⁶, as in Akesson et al Table 1.
-    epochs = 2000,             # The number of epochs used to train the model
-    batchsize = 500,             # The number of samples used in each batch
+    # Training parameters
+    epochs = 5_000,             # The number of epochs used to train the model
+    batchsize = 200,             # The number of samples used in each batch
     passes_per_batch = 5,        # The number of passes of gradient descent on each batch
     validation_frequency = 20,   # Every X epochs, we validate the model (and keep track of the best)
     validation_loss = true,      # Whether we validate or not
-    verbosity = 1000,             # When to print the current epoch / loss information
+    verbosity = 500,             # When to print the current epoch / loss information
     loss = rmse_conv,             # The loss to use in training
 
     # TCN parameters
@@ -40,7 +40,9 @@ function train_tcn(;
     err = zeros(n_params(dgp), test_size, length(N))
     err_best = similar(err)
 
-    rmaes = zeros(length(N)) # holder for mae relative to prior mae
+    rmses = zeros(length(N))
+    maes = zeros(length(N))
+    mabs = zeros(length(N))
 
     for (i, n) ∈ enumerate(N)
         @info "Training TCN for n = $n"
@@ -68,13 +70,19 @@ function train_tcn(;
         Flux.testmode!(model)
         Ŷ = StatsBase.reconstruct(dtY, model(X))
         err[:, :, i] = cpu(Ŷ - Y)
+        rmse = sqrt.(mean(abs2.(err[:, :, i]), dims=2))
         if validation_loss
             Flux.testmode!(best_model)
             Ŷb = StatsBase.reconstruct(dtY, best_model(X))
             err_best[:, :, i] = cpu(Ŷb - Y)
-            rmaes[i] = mean(mean(abs.(err_best[:, :, i]),dims=2) ./ [1.0, 0.5])
+            rmses[i] = mean(sqrt.(mean(abs2.(err_best[:, :, i]), dims=2)))
+            maes[i] = mean(mean(abs.(err_best[:, :, i]),dims=2))
+            mabs[i] = mean(abs.(mean(err_best[:, :, i], dims=2)))
         end
+        @info "TCN (n = $n) done." rmse 
     end
     
-    return rmaes
+    println(@green "mean avg. bias, mean average error, and mean RMSE")
+    pretty_table([N mabs maes rmses])
+    return maes[1]
 end

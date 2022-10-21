@@ -9,10 +9,8 @@ Thus, the reported E%, which is the average over the two parameters of relative 
 =#
 using Statistics
 
-tcn_mae = 0.0917    # average of 10 runs, done by run_tcn.jl
-                    # in the FISNM folder
-                    # each run uses 1000 epochs, batchsize=1000
-                    # so training size is 10^6 per run
+tcn_mae = 0.0871    # average of 10 runs, done by run_tcn.jl
+                    # in the FISNM folder, each using 10^6 samples to train
 
 include("MA2Lib.jl")
 reps = 100_000
