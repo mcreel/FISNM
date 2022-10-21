@@ -1,4 +1,5 @@
-using Distributions, DelimitedFiles, Statistics, Flux, CUDA, BSON
+using Distributions, DelimitedFiles, Flux, CUDA, BSON
+using StatsBase
 
 # estimates GARCH with SP500 data, to get reasonable parameters
 # and standard errors.
@@ -9,42 +10,9 @@ function calibrate()
     f = fit(GARCH{1,1}, data;  meanspec=AR{1})
 end
 
-# draw the params from their priors. Model
-# is parameterized in terms of long run variance,
-# beta+alpha, and beta's share of beta+alpha
-function PriorDraw()
-    # long run variance
-    lrv = 0.0001 + 0.9999*rand()
-    βplusα = 0.99*rand()
-    share = rand()
-    [lrv, βplusα, share]
-end
-
-# get a set of draws from prior
-function PriorDraw(n)
-    draws = zeros(3,n)
-    for i = 1:n
-        draws[:,i] .= PriorDraw()
-    end
-    draws
-end    
-# generates S samples of length n
-# returns are:
-# x: 1 X S*n vector of data from EGARCH model
-# y: 3 X S*n vector of parameters used to generate each sample
-@views function dgp(n, S)
-    y = PriorDraw(S)     # the parameters for each sample
-    x = zeros(1, n*S)    # the Garch data for each sample
-    for s = 1:S
-        x[:,n*s-n+1:s*n] = SimulateGarch11(y[:,s], n)
-    end
-    Float32.(x), Float32.(y)
-end    
-
-
 # the likelihood function, alternative version with reparameterization
 @views function SimulateGarch11(θ, n)
-    burnin = 1000
+    burnin = 0
     # dissect the parameter vector
     lrv, βplusα , share  = θ
     ω = (1.0 - βplusα)*lrv
@@ -53,12 +21,14 @@ end
     ys = zeros(n)
     h = lrv
     y = 0.
-    for t = 1:burnin + n
+    for t = 1:(burnin + n)
         h = ω + α*y^2. + β*h
         y = sqrt(h)*randn()
-        t > burnin ? ys[t-burnin] = y : nothing
+        if t > burnin
+            ys[t-burnin] = y
+        end
     end
-    ys'
+    ys
 end
 
 # the likelihood function, alternative version with reparameterization
@@ -81,3 +51,6 @@ end
     end
     logL = -log(sqrt(2.0*pi)) .- 0.5*log.(h) .- 0.5*(y.^2.)./h
 end
+
+is_possible_garch(lrv, βplusα, share) = 
+    (0 < lrv ≤ 1) && (0 ≤ βplusα < 1) && (0 ≤ share ≤ 1)

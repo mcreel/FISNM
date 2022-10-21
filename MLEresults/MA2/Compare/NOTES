@@ -1,0 +1,3 @@
+This is to compare to Akesson et al Table 1.
+The training set is limited to 10^6, as in that
+table. To replicate, run "run_tcn.jl"
