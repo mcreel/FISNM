@@ -1,7 +1,9 @@
+using Pkg
+Pkg.activate(".")
 using Statistics, Flux, PrettyTables
 using Base.Iterators
 
-include("../MA2lib.jl")
+include("MA2Lib.jl")
 
 @views function lags(x,p)
     cols = size(x,2)
@@ -107,7 +109,8 @@ end
 
 function main()
     # sample size
-    ns = (100, 200, 400, 800, 1600, 3200)
+    ns = (100)
+    #ns = (100, 200, 400, 800, 1600, 3200)
     results = zeros(1,5)
     for n ∈ ns
         P = 10 # order of AR fit to the data
@@ -116,13 +119,14 @@ function main()
         mcreps = 5000
         R = trainsize+testsize+mcreps
         Zs = zeros(P+1, R)
-        thetas = PriorDraw(R)
+        thetas = priordraw(R)
         for i = 1:R
             Zs[:,i] = auxstat(thetas[:,i], n, P)
         end
         bestmodel, err = MakeNeuralMoments(thetas, Zs, trainsize, testsize; Epochs=100)
         priormean = mean(thetas,dims=2)
-        maep = mean(abs.(thetas .- priormean), dims=2)
+        # maep = mean(abs.(thetas .- priormean), dims=2)
+        maep = [1.0, 0.5] # this is the Akesson et. al. normalization (personal communication)
         mae = mean(abs.(err), dims=2)
         relmae = mae ./ maep
         mse = mean(err.^2, dims=2)
@@ -130,9 +134,11 @@ function main()
         println("doing sample size $n")
         results = vcat(results, [n*ones(2)  mae relmae mse rmse])
     end
+    results = results[2:end,:]
     println("results for theta1 and theta2, different sample sizes")
     println("relmae is mae relative to mae of prior mean")
-    pretty_table(results[2:end,:], header=["n", "mae", "relmae", "mse", "rmse"])
-
+    pretty_table(results, header=["n", "mae", "relmae", "mse", "rmse"])
+    mean_rel_abs_error = mean(results[:,3])
+    println("relative mean absolute error, to compare with Akesson et. al: $mean_rel_abs_error")
 end
 main()
