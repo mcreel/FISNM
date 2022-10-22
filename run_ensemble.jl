@@ -6,12 +6,12 @@ include("train_ensemble.jl")
 
 function main()
     DGPs = Dict(
-        "GARCH" => Garch, 
-        "MA2" => Ma2, 
-        "Logit" => Logit
+#        "GARCH" => Garch, 
+        "MA2" => Ma2 
+#        "Logit" => Logit
     )
-    N = [100 * 2^i for i ∈ 0:5]
-    runname = "ensemble-1510"
+    N = [100 * 2^i for i ∈ 0:2]
+    runname = "mc_x_MA"
 
     for (k, v) ∈ DGPs
         @info "Training $k DGP."
