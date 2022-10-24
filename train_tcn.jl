@@ -1,10 +1,11 @@
+using PrettyTables
 include("DGPs.jl") # Include all DGPs
 include("neuralnets.jl")
 
 function train_tcn(; 
     DGPFunc, N, modelname, runname,
     # Sizes and seeds
-    validation_size = 2_000,     # The samples used to keep track of the 'best' model when training
+    validation_size = 5_000,     # The samples used to keep track of the 'best' model when training
     test_size = 5_000,           # The samples used to evaluate the final model
     transform_size = 100_000,    # The samples used in the data transformation of parameters
     train_seed = 77,             # The random seed for training
@@ -12,9 +13,9 @@ function train_tcn(;
     transform_seed = 1204,       # The random seed for the prior draw of the data transformation
 
     # Training parameters
-    epochs = 10_000,             # The number of epochs used to train the model
-    batchsize = 256,             # The number of samples used in each batch
-    passes_per_batch = 2,        # The number of passes of gradient descent on each batch
+    epochs = 100_000,             # The number of epochs used to train the model
+    batchsize = 2048,             # The number of samples used in each batch
+    passes_per_batch = 1,        # The number of passes of gradient descent on each batch
     validation_frequency = 10,   # Every X epochs, we validate the model (and keep track of the best)
     validation_loss = true,      # Whether we validate or not
     verbosity = 500,             # When to print the current epoch / loss information
@@ -22,9 +23,9 @@ function train_tcn(;
 
     # TCN parameters
     dilation = 2,                # WARNING: This has no impact as of now!
-    kernel_size = 8,             # Size of the kernel in the temporal blocks of the TCN
-    channels = 16,               # Number of channels used in each temporal block
-    summary_size = 10,           # Kernel size of the final pass before feedforward NN
+    kernel_size = 32,             # Size of the kernel in the temporal blocks of the TCN
+    channels = 32,               # Number of channels used in each temporal block
+    summary_size = 5,           # Kernel size of the final pass before feedforward NN
     dev = gpu                   # The device to run the model on (cpu/gpu)
 )
 
@@ -70,12 +71,14 @@ function train_tcn(;
             Flux.testmode!(best_model)
             Ŷb = StatsBase.reconstruct(dtY, best_model(X))
             err_best[:, :, i] = cpu(Ŷb - Y)
-            rmse = sqrt.(mean(abs2.(err_best[:, :, i]), dims=2))
+            amae = mean(mean(abs.(err_best[:, :, i]), dims=2))
+            armse = mean(sqrt.(mean(abs2.(err_best[:, :, i]), dims=2)))
         end
         # Save model as BSON
         BSON.@save "models/$modelname/$(runname)_(n-$n).bson" model best_model
 
-        @info "TCN (n = $n) done." rmse
+        @info "TCN (n = $n) done."
+        pretty_table([n amae armse], header=["n", "amae", "armse"])
     end
 
     # Save BSON with results for all sample sizes / models

@@ -113,7 +113,7 @@ function build_tcn(d::DGP; dilation=2, kernel_size=8, channels=16, summary_size=
             ),
             Conv((1, summary_size), 1 => 1, stride=summary_size),
             Flux.flatten,
-            Dense(d.N ÷ summary_size => d.N ÷ summary_size, leakyrelu), # this is a new layer
+            Dense(d.N ÷ summary_size => d.N ÷ summary_size, hardtanh), # this is a new layer
             Dense(d.N ÷ summary_size => dim_out)
         )
     )
