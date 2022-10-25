@@ -5,7 +5,7 @@ include("neuralnets.jl")
 function train_tcn(; 
     DGPFunc, N, modelname, runname,
     # Sizes and seeds
-    validation_size = 5_000,     # The samples used to keep track of the 'best' model when training
+    validation_size = 2_000,     # The samples used to keep track of the 'best' model when training
     test_size = 5_000,           # The samples used to evaluate the final model
     transform_size = 100_000,    # The samples used in the data transformation of parameters
     train_seed = 77,             # The random seed for training
@@ -14,7 +14,7 @@ function train_tcn(;
 
     # Training parameters
     epochs = 100_000,             # The number of epochs used to train the model
-    batchsize = 2048,             # The number of samples used in each batch
+    batchsize = 1024,             # The number of samples used in each batch
     passes_per_batch = 1,        # The number of passes of gradient descent on each batch
     validation_frequency = 10,   # Every X epochs, we validate the model (and keep track of the best)
     validation_loss = true,      # Whether we validate or not
@@ -25,7 +25,7 @@ function train_tcn(;
     dilation = 2,                # WARNING: This has no impact as of now!
     kernel_size = 32,             # Size of the kernel in the temporal blocks of the TCN
     channels = 32,               # Number of channels used in each temporal block
-    summary_size = 5,           # Kernel size of the final pass before feedforward NN
+    summary_size = 10,           # Kernel size of the final pass before feedforward NN
     dev = gpu                   # The device to run the model on (cpu/gpu)
 )
 
@@ -67,20 +67,25 @@ function train_tcn(;
         Ŷ = StatsBase.reconstruct(dtY, model(X))
         err[:, :, i] = cpu(Ŷ - Y)
         rmse = sqrt.(mean(abs2.(err[:, :, i]), dims=2))
+        model = cpu(model)
         if validation_loss
             Flux.testmode!(best_model)
             Ŷb = StatsBase.reconstruct(dtY, best_model(X))
             err_best[:, :, i] = cpu(Ŷb - Y)
             amae = mean(mean(abs.(err_best[:, :, i]), dims=2))
             armse = mean(sqrt.(mean(abs2.(err_best[:, :, i]), dims=2)))
+            best_model = cpu(best_model)
+            BSON.@save "models/$modelname/$(runname)_(n-$n).bson" model best_model
+            pretty_table([n amae armse], header=["n", "amae", "armse"])
+        else
+            BSON.@save "models/$modelname/$(runname)_(n-$n).bson" model
         end
-        # Save model as BSON
-        BSON.@save "models/$modelname/$(runname)_(n-$n).bson" model best_model
-
         @info "TCN (n = $n) done."
-        pretty_table([n amae armse], header=["n", "amae", "armse"])
     end
-
     # Save BSON with results for all sample sizes / models
-    BSON.@save "results/$modelname/err_$runname.bson" err err_best
+    if validation_loss
+        BSON.@save "results/$modelname/err_$runname.bson" err err_best
+    else    
+        BSON.@save "results/$modelname/err_$runname.bson" err
+    end    
 end

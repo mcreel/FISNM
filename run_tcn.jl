@@ -10,8 +10,8 @@ function main()
         "MA2" => Ma2
 #       "Logit" => Logit
     )
-    N = [100 * 2^i for i ∈ 0:1]
-    runname = "tcn-1510"
+    N = [100 * 2^i for i ∈ 0:0]
+    runname = "mcx2"
 
     for (k, v) ∈ DGPs
         @info "Training $k DGP."
