@@ -13,10 +13,10 @@ function train_tcn(;
     transform_seed = 1204,       # The random seed for the prior draw of the data transformation
 
     # Training parameters
-    epochs = 100_000,             # The number of epochs used to train the model
-    batchsize = 1024,             # The number of samples used in each batch
+    epochs = 200_000,             # The number of epochs used to train the model
+    batchsize = 4096,             # The number of samples used in each batch
     passes_per_batch = 1,        # The number of passes of gradient descent on each batch
-    validation_frequency = 10,   # Every X epochs, we validate the model (and keep track of the best)
+    validation_frequency = 50,   # Every X epochs, we validate the model (and keep track of the best)
     validation_loss = true,      # Whether we validate or not
     verbosity = 500,             # When to print the current epoch / loss information
     loss = rmse_conv,            # The loss to use in training

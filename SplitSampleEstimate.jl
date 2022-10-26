@@ -6,7 +6,7 @@ include("DGPs.jl")
 
 # for some reason, there is a world age problem if 
 # this is inside the main() function (???)
-BSON.@load "models/MA2/mcx_(n-100).bson" best_model
+BSON.@load "models/MA2/mcx2_(n-100).bson" best_model
 Flux.testmode!(best_model)
 
 function main()
