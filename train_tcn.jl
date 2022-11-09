@@ -57,6 +57,7 @@ function train_tcn(;
             passes_per_batch=1, validation_size=16,
             validation_frequency = 2, verbosity=verbosity, loss=loss
         )
+        GC.gc(true); CUDA.reclaim() # GC and clear out cache
 
         # Train the network
         Random.seed!(train_seed)
