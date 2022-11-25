@@ -206,7 +206,8 @@ function train_cnn!(
             Flux.update!(opt, θ, ∇) # Take gradient descent step
         end
         # Compute validation loss and print status if verbose
-        if validation_loss && mod(epoch, validation_frequency)==0
+        # Do this for the last 100 epochs, too, in case frequency is low
+        if validation_loss && (mod(epoch, validation_frequency)==0 || epoch > epochs - 1000)
             Flux.testmode!(m)
             Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
             current_loss = loss(Ŷ, Yv)

@@ -19,17 +19,17 @@ function TemporalBlock(
     causal_conv = Chain(
         Conv((1, kernel_size), chan_in => chan_out, dilation = dilation, 
             pad = pad),
-        BatchNorm(chan_out, relu),
+        BatchNorm(chan_out, leakyrelu),
         Conv((1, kernel_size), chan_out => chan_out, dilation = dilation, 
             pad = pad),
-        BatchNorm(chan_out, relu),
+        BatchNorm(chan_out, leakyrelu),
     )
     residual || return causal_conv
     # Skip connection (residual net)
     residual_conv = Conv((1, 1), chan_in => chan_out)
     Chain(
         Parallel(+, causal_conv, residual_conv),
-        x -> relu.(x)
+        x -> leakyrelu.(x)
     )
 end
 
