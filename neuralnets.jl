@@ -3,7 +3,7 @@ using StatsBase
 
 # Transform (K × S × T) arrays to RNN or CNN format
 tabular2rnn(X) = [view(X, :, :, i) for i ∈ axes(X, 3)]
-tabular2conv(X) = permutedims(reshape(X, size(X)..., 1), (4, 3, 1, 2))
+@views tabular2conv(X) = permutedims(reshape(X, size(X)..., 1), (4, 3, 1, 2))
 
 # In the following losses, Ŷ is always the sequence of predictions
 # RMSE on last item only

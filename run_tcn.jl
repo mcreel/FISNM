@@ -6,11 +6,11 @@ include("train_tcn.jl")
 
 function main()
     DGPs = Dict(
-        "GARCH" => Garch 
+#        "GARCH" => Garch 
 #        "MA2" => Ma2
-#       "Logit" => Logit
+       "Logit" => Logit
     )
-    N = [100 * 2^i for i ∈ 0:0]
+    N = [100 * 2^i for i ∈ 1:1]
     runname = "splitsample"
 
     for (k, v) ∈ DGPs

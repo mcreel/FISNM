@@ -77,6 +77,17 @@ end
     Float32.(x), Float32.(y)
 end
 
+# method for sampling with given parameters
+@views function generate(θ, d::Ma2, S::Int)
+    x = zeros(1, S, d.N)    # the Garch data for each sample
+    for s ∈ axes(x, 2)
+        x[1, s, :] = ma2(θ, d.N)
+    end
+    Float32.(x)
+end
+
+
+
 # ------------------------------ Logit ------------------------------
 @views function generate(d::Logit, S::Int)
     y = priordraw(d, S) # The parameters for each sample
