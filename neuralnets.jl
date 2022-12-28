@@ -4,6 +4,7 @@ using StatsBase
 # Transform (K × S × T) arrays to RNN or CNN format
 tabular2rnn(X) = [view(X, :, :, i) for i ∈ axes(X, 3)]
 @views tabular2conv(X) = permutedims(reshape(X, size(X)..., 1), (4, 3, 1, 2))
+tabular2trans(X) = permutedims(X, (1, 3, 2))
 
 # In the following losses, Ŷ is always the sequence of predictions
 # RMSE on last item only
@@ -207,7 +208,7 @@ function train_cnn!(
         end
         # Compute validation loss and print status if verbose
         # Do this for the last 100 epochs, too, in case frequency is low
-        if validation_loss && (mod(epoch, validation_frequency)==0 || epoch > epochs - 1000)
+        if validation_loss && (mod(epoch, validation_frequency)==0 || epoch > epochs - 100)
             Flux.testmode!(m)
             Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
             current_loss = loss(Ŷ, Yv)
