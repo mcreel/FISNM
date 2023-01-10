@@ -82,10 +82,10 @@ function train_transformer(;
         err[:, :, i] = cpu(Ŷ - Y)
         rmse = sqrt.(mean(abs2.(err[:, :, i]), dims=2))
         model = cpu(model)
-        if validation_loss
+        if validation_loss && (mod(epoch, validation_frequency)==0 || epoch > epochs - 100)
             Flux.testmode!(best_model)
             Ŷb = StatsBase.reconstruct(dtY, best_model(X))
-            Ŷb = best_model(X)
+            # Ŷb = best_model(X)
             err_best[:, :, i] = cpu(Ŷb - Y)
             amae = mean(mean(abs.(err_best[:, :, i]), dims=2))
             armse = mean(sqrt.(mean(abs2.(err_best[:, :, i]), dims=2)))
