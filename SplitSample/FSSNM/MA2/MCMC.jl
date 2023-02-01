@@ -12,9 +12,9 @@ global const base_n=100
 BSON.@load "splitsample_(n-$base_n).bson" best_model
 Flux.testmode!(best_model)
 
-@views tabular2conv(X) = permutedims(reshape(X, size(X)..., 1), (4, 3, 1, 2))
+@inbounds @views tabular2conv(X) = permutedims(reshape(X, size(X)..., 1), (4, 3, 1, 2))
 
-function maketransform(dgp)
+@inbounds function maketransform(dgp)
     transform_seed = 1204
     transform_size = 100_000
     Random.seed!(transform_seed)
@@ -22,60 +22,62 @@ function maketransform(dgp)
 end
 
 # computes a TCN fit to data generated at a given parameter
-@views function simstat(θ, dgp, S, dtY)
-    X = generate(θ, dgp, S)
-    Float64.(StatsBase.reconstruct(dtY, best_model(tabular2conv(X))))
+@inbounds @views function simstat(θ, simdata, dgp, S, dtY)
+    generate!(simdata, θ, dgp, S)
+    Float64.(StatsBase.reconstruct(dtY, best_model(tabular2conv(simdata))))
 end    
 
-@views function mΣ(θ, dgp, S, dtY)
-    Zs = simstat(θ, dgp, S, dtY)
+@inbounds @views function mΣ(θ, simdata, dgp, S, dtY)
+    Zs = simstat(θ, simdata, dgp, S, dtY)
     mean(Zs, dims=2)[:], Symmetric(cov(Zs'))
 end
 
 # MVN random walk, or occasional draw from prior
-function Proposal(current, tuning, cholV)
-    current + tuning*cholV'*randn(size(current))
+@inbounds function Proposal(current, tuning, cholV)
+    current + tuning*cholV*randn(size(current))
 end
    
-function objective(θ, θhat, S, dgp, dtY)
-        θbar, Σp = mΣ(θ, dgp, S, dtY)
+@inbounds function objective(θ, simdata, θhat, S, dgp, dtY)
+        θbar, Σp = mΣ(θ, simdata, dgp, S, dtY)
         W = inv(Σp)
         err = θhat - θbar
         dot(err, W, err)
-end    
+end
 
-
-function main()
+@inbounds function main()
+ # reps for covariance of proposa # reps for covariance of proposallfunction main()
     n = 100
-    reps = 10
+    reps = 1
     dgp = Ma2(N=base_n)
     dtY = maketransform(dgp)
+    # MCMC sampling
+    names = ["θ₁", "θ₂"]
+    S = 5 # reps used to evaluate objective
+    covreps = 200 # reps for covariance of proposal
+    length = 1000
+    burnin = 10
+    tuning = 1.0
+    verbosity = false
+    nthreads = 2
     # initialize args of anonymous function
     dgp = Ma2(N=n)
     for rep = 1:reps
-        θ = priordraw(dgp, 1)
         # true params to estimate
         θtrue = priordraw(dgp, 1)
-        θtcn = simstat(θtrue, dgp, 1, dtY)[:] # the sample statistic
+        simdata = zeros(Float32, 1, 1, n)
+        θtcn = simstat(θtrue, simdata, dgp, 1, dtY)[:] # the sample statistic
         display(θtrue)
         display(θtcn)
-        # sample using Turing
-        names = ["θ₁", "θ₂"]
-        S = 20
-        covreps = 200
-        length = 2000
-        burnin = 500
-        tuning = 15.
-        verbosity = true
-        # the covariance of the proposal (scaled by tuning)
-        junk, Σp = mΣ(θtcn, dgp, covreps, dtY)
-        W = inv(Σp)
-        Σp = Matrix(cholesky(Σp))
+        # the covariance of the proposal (subsequently scaled by tuning)
+        simdata = zeros(Float32, 1, covreps, n) # make buffer for simdata
+        junk, Σp = mΣ(θtcn, simdata, dgp, covreps, dtY)
+        Σp = Matrix(cholesky(Σp).U)'
         # now do MCMC
+        simdata = zeros(Float32, 1, S, n) # make buffer for simdata
         prior(θ) = insupport(θ) ? 1. : 0.
         proposal = θ -> Proposal(θ, tuning, Σp)
-        obj = θ -> insupport(θ) ? -objective(θ, θtcn, S, dgp, dtY) : Inf
-        chain = mcmc(θtcn, length, burnin, prior, obj, proposal, verbosity)
+        obj = θ -> -objective(θ, simdata, θtcn, S, dgp, dtY)
+        @time chain = mcmc(θtcn, length, burnin, prior, obj, proposal, verbosity, nthreads)
         chain = Chains(chain[:,1:2], names)
         display(plot(chain))
         display(chain)
