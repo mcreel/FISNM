@@ -6,17 +6,6 @@ using BSON:@load
 include("../../../DGPs.jl")
 
 
-
-#===================================
-#
-#    NOTE: should make a dgp version that keep constant random draws
-#    which will limit allocations, and will allow for gradient based
-#    minimization (e.g., fmincon)
-#
-======================================#    
-
-
-
 # for some reason, there is a world age problem if 
 # this is inside the main() function (???)
 # appears related to https://github.com/JuliaIO/BSON.jl/issues/69
@@ -34,13 +23,16 @@ Flux.testmode!(best_model)
 end
 
 # computes a TCN fit to data generated at a given parameter
-@inbounds @views function simstat(θ, simdata, dgp, S, dtY)
-    generate!(simdata, θ, dgp, S)
+@inbounds @views function simstat(θ, simdata, shocks, dtY)
+    S = size(simdata)[2]
+    for s = 1:S
+        simdata[1,s,:] = shocks[1,s,3:end] .+ θ[1].*shocks[1,s,2:end-1] .+ θ[2].*shocks[1,s,1:end-2]
+    end    
     Float64.(StatsBase.reconstruct(dtY, best_model(tabular2conv(simdata))))
 end    
 
-@inbounds function objective(θ, simdata, θhat, S, dgp, dtY)
-        θbar = mean(simstat(θ, simdata, dgp, S, dtY), dims=2)
+@inbounds function objective(θ, θhat, simdata, shocks, dtY)
+        θbar = mean(simstat(θ, simdata, shocks, dtY), dims=2)
         sum(abs2, θhat - θbar)
 end
 
@@ -56,15 +48,18 @@ end
         # true params to estimate
         θtrue = priordraw(dgp, 1)
         simdata = zeros(Float32, 1, 1, n)
-        θtcn = simstat(θtrue, simdata, dgp, 1, dtY)[:] # the sample statistic
+        shocks = randn(Float32, 1, 1, n+2)
+        θtcn = simstat(θtrue, simdata, shocks, dtY)[:] # the sample statistic
         display(θtrue)
         display(θtcn)
         # now do MSM
         simdata = zeros(Float32, 1, S, n) # make buffer for simdata
-        obj = θ -> insupport(θ) ? objective(θ, simdata, θtcn, S, dgp, dtY) : Inf
+        shocks = randn(Float32, 1, S, n+2)
+        obj = θ -> insupport(θ) ? objective(θ, θtcn, simdata, shocks, dtY) : Inf
         lb = [-2., -1.]
         ub = [2., 1.]
-        results = samin(obj, θtcn, lb, ub, rt=0.5, verbosity=2, coverage_ok=1)
+        results = fmincon(obj, θtcn, [],[],lb, ub)
+        #results = samin(obj, θtcn, lb, ub, rt=0.5, verbosity=2, coverage_ok=1)
     end    
     return results
 end
