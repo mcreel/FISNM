@@ -25,10 +25,10 @@ end
 # computes a TCN fit to data generated at a given parameter
 @inbounds @views function simstat(θ, simdata, shocks, dtY)
     S = size(simdata)[2]
-    for s = 1:S
+    Threads.@threads for s = 1:S
         simdata[1,s,:] = shocks[1,s,3:end] .+ θ[1].*shocks[1,s,2:end-1] .+ θ[2].*shocks[1,s,1:end-2]
     end    
-    Float64.(StatsBase.reconstruct(dtY, best_model(tabular2conv(simdata))))
+    (StatsBase.reconstruct(dtY, best_model(tabular2conv(Float32.(simdata)))))
 end    
 
 @inbounds function objective(θ, θhat, simdata, shocks, dtY)
@@ -46,15 +46,15 @@ end
     results = [] # define to access out of loop
     for rep = 1:reps
         # true params to estimate
-        θtrue = priordraw(dgp, 1)
-        simdata = zeros(Float32, 1, 1, n)
-        shocks = randn(Float32, 1, 1, n+2)
-        θtcn = simstat(θtrue, simdata, shocks, dtY)[:] # the sample statistic
+        θtrue::Vector{Float64} = vec(priordraw(dgp, 1))
+        simdata1 = zeros(1, 1, n)
+        shocks1 = randn(1, 1, n+2)
+        θtcn::Vector{Float64} = vec(simstat(θtrue, simdata1, shocks1, dtY))# the sample statistic
         display(θtrue)
         display(θtcn)
         # now do MSM
-        simdata = zeros(Float32, 1, S, n) # make buffer for simdata
-        shocks = randn(Float32, 1, S, n+2)
+        simdata = zeros(1, S, n) # make buffer for simdata
+        shocks = randn(1, S, n+2)
         obj = θ -> insupport(θ) ? objective(θ, θtcn, simdata, shocks, dtY) : Inf
         lb = [-2., -1.]
         ub = [2., 1.]
