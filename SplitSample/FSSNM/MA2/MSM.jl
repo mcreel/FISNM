@@ -1,7 +1,7 @@
 using Pkg
 Pkg.activate("../../../")
 using Flux, CUDA, PrettyTables, Statistics, Term, MCMCChains
-using LinearAlgebra, StatsPlots, Econometrics
+using LinearAlgebra, Econometrics, DelimitedFiles
 using BSON:@load
 include("../../../DGPs.jl")
 
@@ -26,7 +26,7 @@ end
 @inbounds @views function simstat(θ, simdata, shocks, dtY)
     S = size(simdata)[2]
     Threads.@threads for s = 1:S
-        simdata[1,s,:] = shocks[1,s,3:end] .+ θ[1].*shocks[1,s,2:end-1] .+ θ[2].*shocks[1,s,1:end-2]
+        simdata[1,s,:] .= shocks[1,s,3:end] .+ θ[1].*shocks[1,s,2:end-1] .+ θ[2].*shocks[1,s,1:end-2]
     end    
     (StatsBase.reconstruct(dtY, best_model(tabular2conv(Float32.(simdata)))))
 end    
@@ -38,30 +38,32 @@ end
 
 @inbounds function main()
     n = 100 # sample size
-    reps = 1
+    reps = 500
     dgp = Ma2(N=base_n)
     dtY = maketransform(dgp)
     names = ["θ₁", "θ₂"]
-    S = 50 # reps used to evaluate objective
-    results = [] # define to access out of loop
+    S = 20 # reps used to evaluate objective
+    results = zeros(reps, 7)
     for rep = 1:reps
         # true params to estimate
         θtrue::Vector{Float64} = vec(priordraw(dgp, 1))
+        results[rep, 1:2] = θtrue
         simdata1 = zeros(1, 1, n)
         shocks1 = randn(1, 1, n+2)
         θtcn::Vector{Float64} = vec(simstat(θtrue, simdata1, shocks1, dtY))# the sample statistic
-        display(θtrue)
-        display(θtcn)
+        results[rep, 3:4] = θtcn
         # now do MSM
         simdata = zeros(1, S, n) # make buffer for simdata
         shocks = randn(1, S, n+2)
         obj = θ -> insupport(θ) ? objective(θ, θtcn, simdata, shocks, dtY) : Inf
-        lb = [-2., -1.]
-        ub = [2., 1.]
-        results = fmincon(obj, θtcn, [],[],lb, ub)
-        #results = samin(obj, θtcn, lb, ub, rt=0.5, verbosity=2, coverage_ok=1)
+        lb = [-1.999, -0.999]
+        ub = [1.999, 0.999]
+#        results[rep, 5:6], results[rep, 7], junk = fmincon(obj, θtcn, [],[],lb, ub, tol=1e-5, iterlim=10000)
+        results[rep,5:6], results[rep, 7], junk, junk  = samin(obj, θtcn, lb, ub, rt=0.5, verbosity=1, coverage_ok=1)
+        println(@green "results, rep=$rep")
+        pretty_table(results[rep, :]')
     end    
-    return results
+    writedlm("resultsMA2.txt", results)
 end
 
 
