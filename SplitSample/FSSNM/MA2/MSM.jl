@@ -25,7 +25,7 @@ end
 # computes a TCN fit to data generated at a given parameter
 @inbounds @views function simstat(θ, simdata, shocks, dtY)
     S = size(simdata)[2]
-    Threads.@threads for s = 1:S
+    for s = 1:S
         simdata[1,s,:] .= shocks[1,s,3:end] .+ θ[1].*shocks[1,s,2:end-1] .+ θ[2].*shocks[1,s,1:end-2]
     end    
     (StatsBase.reconstruct(dtY, best_model(tabular2conv(Float32.(simdata)))))
@@ -44,7 +44,7 @@ end
     names = ["θ₁", "θ₂"]
     S = 20 # reps used to evaluate objective
     results = zeros(reps, 7)
-    for rep = 1:reps
+    Threads.@threads for rep = 1:reps
         # true params to estimate
         θtrue::Vector{Float64} = vec(priordraw(dgp, 1))
         results[rep, 1:2] = θtrue
@@ -59,7 +59,7 @@ end
         lb = [-1.999, -0.999]
         ub = [1.999, 0.999]
 #        results[rep, 5:6], results[rep, 7], junk = fmincon(obj, θtcn, [],[],lb, ub, tol=1e-5, iterlim=10000)
-        results[rep,5:6], results[rep, 7], junk, junk  = samin(obj, θtcn, lb, ub, rt=0.5, verbosity=1, coverage_ok=1)
+        results[rep, 5:6], results[rep, 7], junk, junk  = samin(obj, θtcn, lb, ub, rt=0.5, verbosity=1, coverage_ok=1)
         println(@green "results, rep=$rep")
         pretty_table(results[rep, :]')
     end    
