@@ -80,12 +80,18 @@ end
 # method for sampling with given parameters
 @views function generate(θ, d::Ma2, S::Int)
     x = zeros(1, S, d.N)    # the Garch data for each sample
-    for s ∈ axes(x, 2)
+    Threads.@threads for s ∈ axes(x, 2)
         x[1, s, :] = ma2(θ, d.N)
     end
     Float32.(x)
 end
 
+# non-allocating method for sampling with given parameters
+@views function generate!(x, θ, d::Ma2, S::Int)
+    Threads.@threads for s ∈ axes(x, 2)
+        x[1, s, :] = (ma2(θ, d.N))
+    end
+end
 
 
 # ------------------------------ Logit ------------------------------
