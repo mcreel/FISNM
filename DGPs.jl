@@ -147,3 +147,16 @@ function build_tcn_ensemble(
         [opt_func() for _ ∈ 1:n_models]
     )
 end
+
+function build_lstm(
+    d::DGP; hidden_nodes=32, hidden_layers=2, activation=tanh, dev=cpu
+)
+    dim_in, dim_out = n_features(d), n_params(d)
+    dev(
+        Chain(
+            Dense(dim_in => hidden_nodes, activation),
+            [LSTM(hidden_nodes => hidden_nodes) for _ ∈ 1:hidden_layers]...,
+            Dense(hidden_nodes => dim_out)
+        )
+    )
+end
