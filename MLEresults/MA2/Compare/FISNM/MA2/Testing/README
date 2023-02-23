@@ -1,5 +1,0 @@
-The MLE results were generated using seeds 77 and 78
-for params and data, as in file MakeTesting.jl
-
-For the neural nets, recreate the data on the fly, as
-it is large enough that it's not convenient to store.

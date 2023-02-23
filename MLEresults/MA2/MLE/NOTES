@@ -1,5 +1,0 @@
-results are for 5000 draws
-testing data was written to disk,
-and read into gretl, then script run to get MLE
-
-to re-make the data, run MakeTesting.jl

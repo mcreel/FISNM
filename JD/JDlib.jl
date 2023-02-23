@@ -1,6 +1,6 @@
-using DifferentialEquations, Statistics, Random
+using DifferentialEquations #, Statistics, Random
 
-function Diffusion(μ,κ,α,σ,ρ,u0,tspan)
+function diffusion(μ,κ,α,σ,ρ,u0,tspan)
     f = function (du,u,p,t)
         du[1] = μ # drift in log prices
         du[2] = κ.*(α.-u[2]) # mean reversion in shocks
@@ -24,24 +24,26 @@ end
     tics = Int(MinPerDay/MinPerTic) # number of tics in day
     dt = 1/tics # divisions per day
     closing = Int(round(6.5*60/MinPerTic)) # tic at closing
+
     # solve the diffusion
     μ, κ, α, σ, ρ, λ0, λ1, τ = θ
     u0 = [μ; α]
-    prob = Diffusion(μ, κ, α, σ, ρ, u0, (0.0,Days))
+    prob = diffusion(μ, κ, α, σ, ρ, u0, (0.0,Days))
     ## jump in log price
-    rate(u,p,t) = λ0.*(λ0>0.0) # the prior allows for negative rate, to allow an accumulation at zero
+    rate1(u,p,t) = λ0.*(λ0>0.0) # the prior allows for negative rate, to allow an accumulation at zero
     # jump is random sign times  λ1 times current st. dev.
     affect1!(integrator) = (integrator.u[1] = integrator.u[1].+rand([-1.0,1.0]).*λ1.*exp(integrator.u[2]./2.0))
-    jump = ConstantRateJump(rate,affect1!)
+    jump = ConstantRateJump(rate1,affect1!)
     jump_prob = JumpProblem(prob,Direct(), jump)
     # do the simulation
     sol = solve(jump_prob,SRIW1(), dt=dt, adaptive=false, seed=rndseed)
     # get log price, with measurement error
     lnPs = [sol(t)[1] .+ τ.*randn()   for t in dt:dt:Days]
+
     # get log price at end of trading days. We will compute lag, so loose first
-    lnPtrading = zeros(TradingDays+1)
-    RV = zeros(TradingDays+1)
-    BV = zeros(TradingDays+1)
+    lnPtrading = zeros(Float64, TradingDays+1)
+    RV = zeros(Float64, TradingDays+1)
+    BV = zeros(Float64, TradingDays+1)
     DayofWeek = 0 # counter for day of week
     TradingDay = 0 # counter for trading days
     Day = 0
@@ -69,6 +71,7 @@ end
             end    
             lnPtrading[TradingDay] = lnPs[(Day-1)*tics+closing]
         end
+        # TradingDay == 700  && return r
         if DayofWeek==7 # restart the week if Sunday
             DayofWeek = 0
         end

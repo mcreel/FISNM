@@ -1,0 +1,46 @@
+@Base.kwdef struct GARCH <: DGP 
+    N::Int
+end
+
+# ----- Model-specific utilities -----------------------------------------------
+# the likelihood function, alternative version with reparameterization
+function simulate_garch(lrv::Float32, βplusα::Float32, share::Float32, n::Int)
+    ω = (1f0 - βplusα) * lrv
+    β = share * βplusα
+    α = (1f0 - share) * βplusα
+
+    h, y = lrv, 0f0
+    z = randn(Float32, n)
+    ys = zeros(Float32, n)
+
+    @inbounds @simd for t ∈ eachindex(ys)
+        h = ω + α * y ^ 2f0 + β * h
+        y = √h * z[t]
+        ys[t] = y
+    end
+
+    ys
+end
+
+θbounds(::GARCH) = (Float32[.0001, 0, 0], Float32[1, .99, 1])
+
+# ----- DGP necessary functions ------------------------------------------------
+
+# GARCH is parameterized in terms of long run variance β+α, and β's share of β+α
+priordraw(d::GARCH, S::Int) = uniformpriordraw(d, S) # [lrv; β+α; share]
+
+# Generate S samples of length N with K features and P parameters
+# Returns are: (K × S × N), (P × S)
+@views function generate(d::GARCH, S::Int)
+    y = priordraw(d, S)
+    x = zeros(Float32, 1, S, d.N) # the Garch data for each sample
+
+    Threads.@threads for s ∈ axes(x, 2)
+        x[1, s, :] = simulate_garch(y[:, s]..., d.N)
+    end
+
+    x, y
+end
+
+nfeatures(::GARCH) = 1
+nparams(::GARCH) = 3

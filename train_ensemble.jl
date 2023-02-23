@@ -1,3 +1,4 @@
+using PrettyTables
 include("DGPs.jl") # Include all DGPs
 include("neuralnets.jl") 
 include("NNEnsemble.jl") 
@@ -16,10 +17,10 @@ function train_tcn_ensemble(;
     transform_seed = 1204,       # The random seed for the prior draw of the data transformation
 
     # Training parameters
-    epochs = 10_000,             # The number of epochs used to train the model
+    epochs = 1_000,             # The number of epochs used to train the model
     batchsize = 256,             # The number of samples used in each batch
-    passes_per_batch = 2,        # The number of passes of gradient descent on each batch
-    validation_frequency = 10,   # Every X epochs, we validate the model (and keep track of the best)
+    passes_per_batch = 5,        # The number of passes of gradient descent on each batch
+    validation_frequency = 20,   # Every X epochs, we validate the model (and keep track of the best)
     validation_loss = true,      # Whether we validate or not
     verbosity = 500,             # When to print the current epoch / loss information
     loss = rmse_conv,            # The loss to use in training
@@ -48,7 +49,7 @@ function train_tcn_ensemble(;
         dgp = DGPFunc(N=n)
 
         # Create the TCN for the DGP
-        model = build_tcn_ensemble(dgp, ADAM, dilation=dilation, kernel_size=kernel_size, 
+        model = build_tcn_ensemble(dgp, ADAM, 2, dilation=dilation, kernel_size=kernel_size, 
             channels=channels, summary_size=summary_size, dev=dev)
 
         # Train the network
@@ -67,11 +68,13 @@ function train_tcn_ensemble(;
         Flux.testmode!(model)
         Ŷ = StatsBase.reconstruct(dtY, model(X))
         err[:, :, i] = cpu(Ŷ - Y)
-        rmse = sqrt.(mean(abs2.(err[:, :, i]), dims=2))
+        amab = mean(abs.(mean(err[:, :, i], dims=2)))
+        amae = mean(mean(abs.(err[:, :, i]), dims=2))
+        armse = mean(sqrt.(mean(abs2.(err[:, :, i]), dims=2)))
         # Save model as BSON
         BSON.@save "models/$modelname/$(runname)_(n-$n).bson" model
-
-        @info "TCNEnsemble (n = $n) done." rmse
+        @info "TCNEnsemble (n = $n) done. Testing results:"
+        pretty_table([n, amab, amae, armse])#, header=["n", "avg. abs. bias", "avg. abs. err", "avg. rmse"])
     end
 
     # Save BSON with results for all sample sizes / models

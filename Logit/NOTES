@@ -1,4 +1,0 @@
-* estimate.jl does MLE and NN. NN is done only up to n=400.
-* SplitSampleEstimate.jl does NN for larger samples, using n=400 as base
-* all results use bias correction
-

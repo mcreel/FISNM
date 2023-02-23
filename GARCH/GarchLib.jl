@@ -10,26 +10,7 @@ function calibrate()
     f = fit(GARCH{1,1}, data;  meanspec=AR{1})
 end
 
-# the likelihood function, alternative version with reparameterization
-@views function SimulateGarch11(θ, n)
-    burnin = 0
-    # dissect the parameter vector
-    lrv, βplusα , share  = θ
-    ω = (1.0 - βplusα)*lrv
-    β = share*βplusα
-    α = (1.0 - share)*βplusα
-    ys = zeros(n)
-    h = lrv
-    y = 0.
-    for t = 1:(burnin + n)
-        h = ω + α*y^2. + β*h
-        y = sqrt(h)*randn()
-        if t > burnin
-            ys[t-burnin] = y
-        end
-    end
-    ys
-end
+
 
 # the likelihood function, alternative version with reparameterization
 @views function garch11(θ, y)

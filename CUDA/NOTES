@@ -1,6 +1,0 @@
-Get the latest production driver from
-
-https://www.nvidia.com/en-us/drivers/unix/
-
-install without DKMS, and don't install 32 bit compatibility
-probably need reinstall when kernel updated

@@ -3,7 +3,7 @@ using StatsBase
 
 # Transform (K × S × T) arrays to RNN or CNN format
 tabular2rnn(X) = [view(X, :, :, i) for i ∈ axes(X, 3)]
-tabular2conv(X) = permutedims(reshape(X, size(X)..., 1), (4, 3, 1, 2))
+@views tabular2conv(X) = permutedims(reshape(X, size(X)..., 1), (4, 3, 1, 2))
 
 # In the following losses, Ŷ is always the sequence of predictions
 # RMSE on last item only
@@ -95,17 +95,19 @@ end
 
 # Trains a recurrent neural network
 function train_rnn!(
-    m, opt, dgp, n, dtY; 
+    m, opt, dgp, dtY; 
     epochs=1000, batchsize=32, passes_per_batch=10, dev=cpu, loss=mse_full,
-    validation_loss=true, validation_frequency=10, validation_size=2000, verbosity=1, bidirectional=false
+    validation_loss=true, validation_frequency=10, validation_size=2000, verbosity=1, 
+    transform=true
 )
     Flux.trainmode!(m) # In case we have dropout / batchnorm
     θ = Flux.params(m) # Extract parameters
     best_model = deepcopy(m)
     best_loss = Inf
+
     # Create a validation set to compute and keep track of losses
     if validation_loss
-        Xv, Yv = map(dev, dgp(n, validation_size))
+        Xv, Yv = generate(dgp, batchsize, dev=dev)
         #StatsBase.transform!(dtY, Yv) # NOTE: want to see loss for real scale
         Xv = tabular2rnn(Xv)
         losses = zeros(epochs)
@@ -113,43 +115,28 @@ function train_rnn!(
     
     # Iterate over training epochs
     for epoch ∈ 1:epochs
-        X, Y = map(dev, dgp(n, batchsize)) # Generate a new batch
-        X = tabular2rnn(X) 
-        # Standardize targets for MSE scaling
-        # no need to do this for every sample, use a high accuracy
-        # transform from large draw from prior
-        StatsBase.transform!(dtY, Y)
-
-        # ----- training ---------------------------------------------
-        for i = 1:passes_per_batch
+        X, Y = generate(dgp, batchsize, dev=dev) # Generate a new batch
+        transform && StatsBase.transform!(dtY, Y)
+        # Transform features to format for RNN
+        X = tabular2rnn(X)
+        # ----- Training ---------------------------------------------
+        for _ ∈ 1:passes_per_batch
             Flux.reset!(m)
             # Compute loss and gradients
-            if bidirectional # Special case for bidirectional RNN
-                ∇ = gradient(θ) do
-                    Ŷ = [m(X)]
-                    loss(Ŷ, Y)
-                end
-                Flux.update!(opt, θ, ∇) # Take gradient descent step
-            else
-                ∇ = gradient(θ) do
-                    m(X[1]) # don't use first, to warm up state
-                    Ŷ = [m(x) for x ∈ X[2:end]]
-                    loss(Ŷ, Y)
-                end
-                Flux.update!(opt, θ, ∇) # Take gradient descent step
+            ∇ = gradient(θ) do
+                m(X[1]) # don't use first, to warm up state
+                Ŷ = [m(x) for x ∈ X[2:end]]
+                loss(Ŷ, Y)
             end
+            Flux.update!(opt, θ, ∇) # Take gradient descent step
         end
 
         # Compute validation loss and print status if verbose
         if validation_loss && mod(epoch, validation_frequency)==0
             Flux.reset!(m)
             Flux.testmode!(m)
-            if bidirectional # Special case for bidirectional RNN
-                Ŷ = [m(Xv)]
-            else
             m(Xv[1]) # Warm up state on first observation
-            Ŷ = [StatsBase.reconstruct(dtY, m(x)) for x ∈ Xv]
-            end
+            Ŷ = [StatsBase.reconstruct(dtY, m(x)) for x ∈ Xv[2:end]]
             current_loss = loss(Ŷ, Yv)
             if current_loss < best_loss
                 best_loss = current_loss
@@ -157,7 +144,7 @@ function train_rnn!(
             end
             losses[epoch] = current_loss
             Flux.trainmode!(m)
-            epoch % verbosity == 0 && @info "$epoch / $epochs"   best_loss  current_loss
+            epoch % verbosity == 0 && @info "$epoch / $epochs" best_loss current_loss
         else
             epoch % verbosity == 0 && @info "$epoch / $epochs"
         end
@@ -196,6 +183,7 @@ function train_cnn!(
         transform && StatsBase.transform!(dtY, Y)
         # Transform features to format for CNN
         X = tabular2conv(X)
+
         # ----- Training ---------------------------------------------
         for _ ∈ 1:passes_per_batch
             # Compute loss and gradients
@@ -206,7 +194,8 @@ function train_cnn!(
             Flux.update!(opt, θ, ∇) # Take gradient descent step
         end
         # Compute validation loss and print status if verbose
-        if validation_loss && mod(epoch, validation_frequency)==0
+        # Do this for the last 100 epochs, too, in case frequency is low
+        if validation_loss && (mod(epoch, validation_frequency)==0 || epoch > epochs - 1000)
             Flux.testmode!(m)
             Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
             current_loss = loss(Ŷ, Yv)
@@ -216,7 +205,9 @@ function train_cnn!(
             end
             losses[epoch] = current_loss
             Flux.trainmode!(m)
-            epoch % verbosity == 0 && @info "$epoch / $epochs"   best_loss  current_loss
+            epoch % verbosity == 0 && @info "$epoch / $epochs" best_loss current_loss
+            GC.gc(true)
+            CUDA.reclaim() # GC and clear out cache
         else
             epoch % verbosity == 0 && @info "$epoch / $epochs"
         end
