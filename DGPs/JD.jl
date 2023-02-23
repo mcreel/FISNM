@@ -3,6 +3,7 @@
 end
 
 # ----- Model-specific utilities -----------------------------------------------
+isweekday(d::Int)::Bool = (d % 7) % 6 != 0
 
 θbounds(::JD) = (
     Float32[-.1, .001, -6, .5, -.99, -.02, 2, -.02], 
@@ -24,10 +25,9 @@ function diffusion(μ,κ,α,σ,ρ,u0,tspan)
 end
 
 
-@views function simulate_jd(θ, burnin, rndseed)
-    Random.seed!(rndseed)
-    trading_days = 1_000 + burnin
-    days = round(Int, 1.4trading_days) # Add weekends (x + x/5*2 = 1.4x)
+@views function simulate_jd(θ, n::Int, burnin::Int=100)
+    trading_days = n 
+    days = round(Int, 1.4 * (trading_days + burnin)) # Add weekends (x + x/5*2 = 1.4x)
     min_per_day = 1_440 # Minutes per day
     min_per_tic = 10 # Minutes between tics, lower for better accuracy
     tics = round(Int, min_per_day / min_per_tic) # Number of tics per day
@@ -53,22 +53,26 @@ end
     jump_prob = JumpProblem(prob, Direct(), jump)
 
     # Do the simulation
-    sol = solve(jump_prob, SRIW1(), dt=dt, adaptive=false, seed=rndseed) # TODO: Seed?
+    sol = solve(jump_prob, SRIW1(), dt=dt, adaptive=false)
 
     # Get log price, with measurement error 
     # Trick: we only need very few log prices, 39 per trading day, use smart filtering
-    lnPs_itr = (
-        [sol(t)[1] + τ * randn() for t ∈ take(p, closing)]
-        for (d, p) ∈ enumerate(partition(dt:dt:days, tics)) if (d % 7) % 6 != 0 
+    lnPs = (
+        [sol(t)[1] + τ * randn() for t ∈ Iterators.take(p, closing)]
+        for (_, p) ∈ Iterators.drop(
+            Iterators.filter(
+                x -> isweekday(x[1]), 
+                enumerate(Iterators.partition(dt:dt:days, tics))), 
+            burnin - 1)
     )
 
     # Get log price at end of trading days We will compute lag, so lose first
-    lnP_trading = zeros(Float64, trading_days - burnin + 1)
-    rv = zeros(Float64, trading_days - burnin + 1)
-    bv = zeros(Float64, trading_days - burnin + 1) 
+    lnP_trading = zeros(Float64, trading_days + 1)
+    rv = zeros(Float64, trading_days + 1)
+    bv = zeros(Float64, trading_days + 1) 
 
     p₋₁ = 0.
-    @inbounds for (t, p) ∈ enumerate(drop(lnPs_itr, burnin - 1))
+    @inbounds for (t, p) ∈ enumerate(lnPs)
         r = abs.(diff([p₋₁; p]))
         bv[t] = dot(r[2:end], r[1:end-1])
         rv[t] = dot(r[2:end], r[2:end])
@@ -76,11 +80,23 @@ end
         lnP_trading[t] = p[end]
     end
 
-    [diff(lnP_trading[1:end]) rv[2:end] π/2 .* bv[2:end]]
+    permutedims([diff(lnP_trading[1:end]) rv[2:end] π/2 .* bv[2:end]])
 end
 
 # ----- DGP necessary functions ------------------------------------------------
 priordraw(d::JD, S::Int) = uniformpriordraw(d, S) # [μ; κ; α; σ; ρ; λ₀; λ₁; τ]
 
-nfeatures(::JD) = 1
+@views function generate(d::JD, S::Int)
+    y = priordraw(d, S)
+    x = zeros(Float32, 3, S, d.N)
+
+    Threads.@threads for s ∈ axes(x, 2)
+        x[:, s, :] = simulate_jd(y[:, s], d.N)
+    end
+
+    x, y
+end
+
+
+nfeatures(::JD) = 3
 nparams(::JD) = 8
