@@ -1,6 +1,82 @@
-using PrettyTables
-include("DGPs.jl") # Include all DGPs
-include("neuralnets.jl")
+# Build TCN for a given DGP
+function build_tcn(d::DGP; dilation=2, kernel_size=8, channels=16, summary_size=10, dev=cpu)
+    # Compute TCN dimensions and necessary layers for full RFS
+    n_layers = ceil(Int, necessary_layers(dilation, kernel_size, d.N))
+    dim_in, dim_out = nfeatures(d), nparams(d)
+    dev(
+        Chain(
+            TCN(
+                vcat(dim_in, [channels for _ ∈ 1:n_layers], 1),
+                kernel_size=kernel_size, # TODO: BE CAREFUL! DILATION IS ACTUALLY NOT HANDLED!!!
+            ),
+            Conv((1, summary_size), 1 => 1, stride=summary_size),
+            Flux.flatten,
+            Dense(d.N ÷ summary_size => d.N ÷ summary_size, hardtanh), # this is a new layer
+            Dense(d.N ÷ summary_size => dim_out)
+        )
+    )
+end
+
+# Train a convolutional neural network
+function train_cnn!(
+    m, opt, dgp, dtY;
+    epochs=1000, batchsize=32, passes_per_batch=10, dev=cpu, loss=rmse_conv,
+    validation_loss=true, validation_frequency=10, validation_size=2_000, verbosity=1, 
+    transform=true
+)
+    Flux.trainmode!(m) # In case we have dropout / layer normalization
+    θ = Flux.params(m) # Extract parameters
+    best_model = deepcopy(m) 
+    best_loss = Inf
+
+    # Create a validation set to compute and keep track of losses
+    if validation_loss
+        Xv, Yv = generate(dgp, validation_size, dev=dev)
+        # Want to see validation RMSE on original scale => no rescaling
+        Xv = tabular2conv(Xv)
+        losses = zeros(epochs)
+    end
+
+    # Iterate over training epochs
+    for epoch ∈ 1:epochs
+        X, Y = generate(dgp, batchsize, dev=dev) # Generate a new batch
+        transform && StatsBase.transform!(dtY, Y)
+        # Transform features to format for CNN
+        X = tabular2conv(X)
+
+        # ----- Training ---------------------------------------------
+        for _ ∈ 1:passes_per_batch
+            # Compute loss and gradients
+            ∇ = gradient(θ) do
+                Ŷ = m(X)
+                loss(Ŷ, Y)
+            end
+            Flux.update!(opt, θ, ∇) # Take gradient descent step
+        end
+        # Compute validation loss and print status if verbose
+        # Do this for the last 100 epochs, too, in case frequency is low
+        if validation_loss && (mod(epoch, validation_frequency)==0 || epoch > epochs - 1000)
+            Flux.testmode!(m)
+            Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
+            current_loss = loss(Ŷ, Yv)
+            if current_loss < best_loss
+                best_loss = current_loss
+                best_model = deepcopy(m)
+            end
+            losses[epoch] = current_loss
+            Flux.trainmode!(m)
+            epoch % verbosity == 0 && @info "$epoch / $epochs" best_loss current_loss
+        else
+            epoch % verbosity == 0 && @info "$epoch / $epochs"
+        end
+    end
+    # Return losses if tracked
+    if validation_loss
+        losses, best_model
+    else
+        nothing
+    end
+end
 
 function train_tcn(; 
     DGPFunc, N, modelname, runname,
@@ -28,7 +104,7 @@ function train_tcn(;
     summary_size = 10,           # Kernel size of the final pass before feedforward NN
     dev = gpu                   # The device to run the model on (cpu/gpu)
 )
-
+    on_gpu = dev == gpu
 
     # We need to create one instance of dgp before training (N doesn't matter in this case)
     dgp = DGPFunc(N=N[1])
@@ -38,7 +114,7 @@ function train_tcn(;
     dtY = data_transform(dgp, transform_size, dev=dev)
 
     # Create arrays for error tracking
-    err = zeros(n_params(dgp), test_size, length(N))
+    err = zeros(nparams(dgp), test_size, length(N))
     err_best = similar(err)
 
     for (i, n) ∈ enumerate(N)
@@ -52,7 +128,7 @@ function train_tcn(;
 
         # warm up the net with small version
         GC.gc(true)
-        CUDA.reclaim() # GC and clear out cache
+        on_gpu && CUDA.reclaim() # GC and clear out cache
         Random.seed!(train_seed)
         _, best_model = train_cnn!(
             model, opt, dgp, dtY, epochs=1, batchsize=16, dev=dev, 
@@ -60,7 +136,7 @@ function train_tcn(;
             validation_frequency = 2, verbosity=verbosity, loss=loss
         )
         GC.gc(true)
-        CUDA.reclaim() # GC and clear out cache
+        on_gpu && CUDA.reclaim() # GC and clear out cache
 
         # Train the network
         Random.seed!(train_seed)
@@ -102,3 +178,20 @@ function train_tcn(;
          BSON.@save "results/$modelname/err_$runname.bson" err
     end    
 end
+
+
+# Add bias correction at the end of a network
+function bias_corrected_tcn(tcn, X, Y)
+    Flux.testmode!(tcn)
+    bias = mean(tcn(X) - Y, dims=2)
+    Chain(deepcopy(tcn), x -> x .- bias)
+end
+
+# Computes the receptive field size for a specified dilation, kernel size, and number of layers
+receptive_field_size(dilation::Int, kernel_size::Int, layers::Int) = 
+    1 + (kernel_size - 1) * (dilation ^ layers - 1) / (dilation - 1)
+
+# Minimum number of layers necessary to achieve a specified receptive field size
+# (take ceil(Int, necessary_layers(...)) for final number of layers)
+necessary_layers(dilation::Int, kernel_size::Int, receptive_field::Int) =
+    log(dilation, (receptive_field - 1) * (dilation - 1) / (kernel_size - 1)) + 1

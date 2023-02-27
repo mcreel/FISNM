@@ -26,7 +26,7 @@ end
 
 
 @views function simulate_jd(θ, n::Int, burnin::Int=100)
-    trading_days = n 
+    trading_days = n # TODO: slightly ugly.
     days = round(Int, 1.4 * (trading_days + burnin)) # Add weekends (x + x/5*2 = 1.4x)
     min_per_day = 1_440 # Minutes per day
     min_per_tic = 10 # Minutes between tics, lower for better accuracy

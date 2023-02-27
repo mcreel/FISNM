@@ -2,9 +2,10 @@ using BSON: @load
 using StatsBase
 using PrettyTables
 
-runname = "err_23-02-11"
+# runname = "err_23-02-11"
+# runname = "err_lstm_23-02-21"
 for dgp ∈ ["GARCH", "MA2", "Logit"]
-    @load "results/$dgp/$runname.bson" err_best
+    @load "../FISNM/results/$dgp/$runname.bson" err_best
 
 
     n = map(i -> 100 * 2^(i - 1), axes(err_best, 3))

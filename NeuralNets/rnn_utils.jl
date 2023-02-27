@@ -1,6 +1,78 @@
-using PrettyTables
-include("DGPs.jl") # Include all DGPs
-include("neuralnets.jl")
+function build_lstm(
+    d::DGP; hidden_nodes=32, hidden_layers=2, activation=tanh, dev=cpu
+)
+    dim_in, dim_out = nfeatures(d), nparams(d)
+    dev(
+        Chain(
+            Dense(dim_in => hidden_nodes, activation),
+            [LSTM(hidden_nodes => hidden_nodes) for _ ∈ 1:hidden_layers]...,
+            Dense(hidden_nodes => dim_out)
+        )
+    )
+end
+
+# Trains a recurrent neural network
+function train_rnn!(
+    m, opt, dgp, dtY; 
+    epochs=1000, batchsize=32, passes_per_batch=10, dev=cpu, loss=mse_full,
+    validation_loss=true, validation_frequency=10, validation_size=2000, verbosity=1, 
+    transform=true
+)
+    Flux.trainmode!(m) # In case we have dropout / batchnorm
+    θ = Flux.params(m) # Extract parameters
+    best_model = deepcopy(m)
+    best_loss = Inf
+
+    # Create a validation set to compute and keep track of losses
+    if validation_loss
+        Xv, Yv = generate(dgp, validation_size, dev=dev)
+        Xv = tabular2rnn(Xv)
+        losses = zeros(epochs)
+    end
+    
+    # Iterate over training epochs
+    for epoch ∈ 1:epochs
+        X, Y = generate(dgp, batchsize, dev=dev) # Generate a new batch
+        transform && StatsBase.transform!(dtY, Y)
+        # Transform features to format for RNN
+        X = tabular2rnn(X)
+        # ----- Training ---------------------------------------------
+        for _ ∈ 1:passes_per_batch
+            Flux.reset!(m)
+            # Compute loss and gradients
+            ∇ = gradient(θ) do
+                m(X[1]) # don't use first, to warm up state
+                Ŷ = [m(x) for x ∈ X[2:end]]
+                loss(Ŷ, Y)
+            end
+            Flux.update!(opt, θ, ∇) # Take gradient descent step
+        end
+
+        # Compute validation loss and print status if verbose
+        if validation_loss && mod(epoch, validation_frequency)==0
+            Flux.reset!(m)
+            Flux.testmode!(m)
+            m(Xv[1]) # Warm up state on first observation
+            Ŷ = [StatsBase.reconstruct(dtY, m(x)) for x ∈ Xv[2:end]]
+            current_loss = loss(Ŷ, Yv)
+            if current_loss < best_loss
+                best_loss = current_loss
+                best_model = deepcopy(m)
+            end
+            losses[epoch] = current_loss
+            Flux.trainmode!(m)
+            epoch % verbosity == 0 && @info "$epoch / $epochs" best_loss current_loss
+        else
+            epoch % verbosity == 0 && @info "$epoch / $epochs"
+        end
+    end
+    # Return losses if tracked
+    if validation_loss
+        losses, best_model
+    else
+        nothing, nothing
+    end
+end
 
 function train_lstm(; 
     DGPFunc, N, modelname, runname,
@@ -27,7 +99,7 @@ function train_lstm(;
     activation = tanh,          # Activation function from the first Dense input layer to the first hidden layer
     dev = gpu                   # The device to run the model on (cpu/gpu)
 )
-
+    on_gpu = dev == gpu
     # We need to create one instance of dgp before training (N doesn't matter in this case)
     dgp = DGPFunc(N=N[1])
 
@@ -36,7 +108,7 @@ function train_lstm(;
     dtY = data_transform(dgp, transform_size, dev=dev)
 
     # Create arrays for error tracking
-    err = zeros(n_params(dgp), test_size, length(N))
+    err = zeros(nparams(dgp), test_size, length(N))
     err_best = similar(err)
 
     for (i, n) ∈ enumerate(N)
@@ -50,7 +122,7 @@ function train_lstm(;
 
         # warm up the net with small version
         GC.gc(true)
-        CUDA.reclaim() # GC and clear out cache
+        on_gpu && CUDA.reclaim() # GC and clear out cache
         Random.seed!(train_seed)
         _, best_model = train_rnn!(
             model, opt, dgp, dtY, epochs=1, batchsize=16, dev=dev, 
@@ -58,7 +130,7 @@ function train_lstm(;
             validation_frequency = 2, verbosity=verbosity, loss=loss
         )
         GC.gc(true)
-        CUDA.reclaim() # GC and clear out cache
+        on_gpu && CUDA.reclaim() # GC and clear out cache
 
         # Train the network
         Random.seed!(train_seed)
