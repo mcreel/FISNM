@@ -44,3 +44,19 @@ end
 
 nfeatures(::GARCH) = 1
 nparams(::GARCH) = 3
+
+@views function likelihood(::GARCH, X, θ)
+    lrv, βplusα , share  = θ
+    ω = (1 - βplusα) * lrv
+    β = share * βplusα
+    α = (1 - share) * βplusα
+    n = size(X, 1)
+    h = zeros(n)
+    X = X .^ 2
+    h[1] = lrv
+    @inbounds for t ∈ 2:n
+        h[t] = ω + α * X[t-1] + β * h[t-1]
+    end
+    # Drop the constant part from the loglikelihood (-log(sqrt(2π)))
+    mean(-0.5log.(h) .- X ./ (2h))
+end
