@@ -35,3 +35,12 @@ end
 
 nfeatures(d::Logit) = d.K + 1
 nparams(d::Logit) = d.K
+
+priorerror(d::Logit) = fill(√(2 / π), d.K)
+
+@views function likelihood(::Logit, X, θ)
+    x = X[1:end-1, :]
+    y = X[end, :]
+    p = 1 ./ (1 .+ exp.(-x'θ))
+    mean(y .* log.(p) .+ (log.(1 .- p)) .* (1 .- y))
+end

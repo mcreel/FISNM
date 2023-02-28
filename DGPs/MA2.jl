@@ -45,3 +45,6 @@ end
 
 nfeatures(::MA2) = 1
 nparams(::MA2) = 2
+
+priorpred(d::MA2) = [0., 1/3]
+priorerror(d::MA2) = [1., .5] # TODO !

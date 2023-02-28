@@ -23,3 +23,4 @@ end
 # Expected absolute error when using the prior mean as prediction 
 # θbounds has to be defined => uniform priors only
 priorerror(d::DGP) = .25abs.(reduce(-, θbounds(d)))
+priorpred(d::DGP) = .5reduce(+, θbounds(d))
