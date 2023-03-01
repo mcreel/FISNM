@@ -1,6 +1,14 @@
+using Pkg
+Pkg.activate(".")
 using BSON
 using Optim
 using Random
+using StatsBase
+
+include("DGPs/DGPs.jl")
+include("DGPs/GARCH.jl")
+include("DGPs/Logit.jl")
+
 
 include("samin.jl")
 
@@ -30,8 +38,8 @@ function run_mle(;
             θstart = priorpred(dgp)
             @inbounds Threads.@threads for s ∈ axes(Y, 2)
                 @views Ŷ, _, _, _ = samin(
-                    θ -> -likelihood(dgp, X[:, s, :], θ),
-                    θstart, lb, ub, verbosity=0
+                    θ -> -likelihood(dgp, X[1, s, :], θ), θstart, lb, ub, 
+                    verbosity=0, rt=0.25, maxevals=1e5, coverage_ok=1
                 )
                 err[:, s, i] = Y[:, s] - Ŷ
             end
@@ -53,5 +61,5 @@ end
 
 run_mle(
     DGPFunc=GARCH, N=[100 * 2^i for i ∈ 0:3], 
-    modelname="GARCH", runname="err_mle_23-02-28"
-)y<
+    modelname="GARCH", runname="err_mle_23-03-01"
+)
