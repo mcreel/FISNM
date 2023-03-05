@@ -10,6 +10,33 @@ function simulate_ma2(θ₁::Float32, θ₂::Float32, n::Int)
     ϵ[3:end] .+ θ₁ .* ϵ[2:end-1] .+ θ₂ .* ϵ[1:end-2]
 end
 
+# MLE functions
+# This fills in the covariance matrix for MA2
+@inbounds @views function Σ!(θ, Σ)
+    n = size(Σ,1)
+    ϕ₁, ϕ₂ = θ 
+    for t = 1:n
+        Σ[t,t] = 1.0 + ϕ₁^2+ ϕ₂^2
+    end
+    for t = 1:n-1
+        Σ[t,t+1] = ϕ₁*(1.0 + ϕ₂)
+        Σ[t+1,t] = ϕ₁*(1.0 + ϕ₂)
+    end
+    for t = 1:n-2
+        Σ[t,t+2] = ϕ₂ 
+        Σ[t+2,t] = ϕ₂
+    end
+end
+
+@views function likelihood(d::MA2, X, θ, Σ, Σ⁻¹)
+    insupport(d, θ...) || return -Inf
+    n = size(X, 1)
+    Σ!(θ, Σ)
+    Σ⁻¹ .= inv(Σ)
+    # Return loglikelihood without constant part
+    -log(det(Σ))/(2n) - dot(X, Σ⁻¹, X)
+end
+
 # ----- DGP necessary functions ------------------------------------------------
 # Use rejection sampling to stay inside identified region
 @views function priordraw(d::MA2, S::Int)::Matrix{Float32}
