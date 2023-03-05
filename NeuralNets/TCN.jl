@@ -34,8 +34,9 @@ function TCN(
     kernel_size::Int, dilation_factor::Int = 2, 
     residual::Bool = true, pad = SamePad()
 )
-    Chain([TemporalBlock(chan_in, chan_out, dilation = dilation_factor ^ (i - 1), 
-        kernel_size = kernel_size, residual = residual,
-        pad = pad) 
+    Chain([
+        TemporalBlock(chan_in, chan_out, dilation = dilation_factor ^ (i - 1), 
+            kernel_size = kernel_size, residual = residual, pad = pad
+        ) 
         for (i, (chan_in, chan_out)) ∈ enumerate(zip(channels[1:end-1], channels[2:end]))]...)
 end

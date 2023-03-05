@@ -12,5 +12,5 @@ rmse_last(Ŷ, Y) = mean(sqrt, mean(abs2.(Ŷ[end] - Y), dims=2))
 mse_last(Ŷ, Y) = mean(mean(abs2.(Ŷ[end] - Y)))
 
 # In the following losses, Ŷ is the same dimension as Y (CNN style prediction)
-rmse_conv(Ŷ, Y) = mean(sqrt, mean(abs2.(Ŷ - Y), dims=2))
+rmse_conv(Ŷ, Y) = mean(sqrt.(mean(abs2.(Ŷ - Y), dims=2)))
 mse_conv(Ŷ, Y) = mean(abs2, Ŷ - Y)

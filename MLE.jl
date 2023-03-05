@@ -45,7 +45,7 @@ function run_mle(;
                 )
                 err[:, s, i] = Y[:, s] - Ŷ
             end
-        elseif isa(dgp, MA2)
+        elseif isa(dgp, MA2) # ! DO NOT MULTITHREAD THIS !
             Σ, Σ⁻¹ = zeros(n, n), zeros(n, n)
             @inbounds for s ∈ axes(Y, 2)
                 @views Ŷ = Optim.optimize(
@@ -55,7 +55,7 @@ function run_mle(;
                 err[:, s, i] = Y[:, s] - Ŷ
             end
         else
-            error("Not implemented yet.")
+            error("Not implemented.")
         end
     end
     BSON.@save "results/$modelname/$runname.bson" err
