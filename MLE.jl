@@ -46,10 +46,16 @@ function run_mle(;
                 err[:, s, i] = Y[:, s] - Ŷ
             end
         elseif isa(dgp, MA2) # ! DO NOT MULTITHREAD THIS !
-            Σ, Σ⁻¹ = zeros(n, n), zeros(n, n)
             @inbounds for s ∈ axes(Y, 2)
+                Σ, Σ⁻¹ = zeros(n, n), zeros(n, n)
                 @views Ŷ = Optim.optimize(
                     θ -> -likelihood(dgp, X[1, s, :], θ, Σ, Σ⁻¹), θstart, 
+                    NelderMead()
+                ).minimizer
+                # Double minimization, start from past initial point
+                Σ, Σ⁻¹ = zeros(n, n), zeros(n, n)
+                @views Ŷ = Optim.optimize(
+                    θ -> -likelihood(dgp, X[1, s, :], θ, Σ, Σ⁻¹), Ŷ, 
                     NelderMead()
                 ).minimizer
                 err[:, s, i] = Y[:, s] - Ŷ
@@ -72,5 +78,5 @@ end
 
 run_mle(
     DGPFunc=MA2, N=[100 * 2^i for i ∈ 0:3], 
-    modelname="MA2", runname="err_mle_23-03-04"
+    modelname="MA2", runname="err_mle_23-03-06"
 )
