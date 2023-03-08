@@ -26,12 +26,13 @@ function main()
     files = readdir(dir)
     i = isempty(files) ? 0 : maximum(map(
         x -> parse(Int, split(x, ".")[1]), files))
-    S = 5_000 # Number of simulation files
+    S = 20_000 # Number of simulation files
     batchsize = 1_024 # Batches per file
     verbosity = 100
 
     dgp = JD(N=1_000)
     
+    @info "Generating samples"
     for s ∈ 1:S
         i += 1
         X, Y = generate(dgp, batchsize)
