@@ -1,15 +1,17 @@
 using Pkg
 Pkg.activate("../../../")
-using Flux, CUDA, PrettyTables, Statistics, Term, MCMCChains
-using LinearAlgebra, StatsPlots, Econometrics
+using Flux, CUDA, MLUtils
+using PrettyTables, Statistics, Term, MCMCChains
+using LinearAlgebra, StatsPlots
 using BSON:@load
 include("../../../DGPs.jl")
+include("mcmc.jl")
 
 # for some reason, there is a world age problem if 
 # this is inside the main() function (???)
 # appears related to https://github.com/JuliaIO/BSON.jl/issues/69
 global const base_n=100
-BSON.@load "splitsample_(n-$base_n).bson" best_model
+BSON.@load "splitsample_(n-$base_n)_fix.bson" best_model
 Flux.testmode!(best_model)
 
 @inbounds @views tabular2conv(X) = permutedims(reshape(X, size(X)..., 1), (4, 3, 1, 2))
@@ -52,12 +54,12 @@ end
     dtY = maketransform(dgp)
     # MCMC sampling
     names = ["θ₁", "θ₂"]
-    S = 5 # reps used to evaluate objective
+    S = 10 # reps used to evaluate objective
     covreps = 200 # reps for covariance of proposal
-    length = 1000
-    burnin = 10
+    length = 4000
+    burnin = 100
     tuning = 1.0
-    verbosity = false
+    verbosity = true
     nthreads = 2
     # initialize args of anonymous function
     dgp = Ma2(N=n)
@@ -77,7 +79,7 @@ end
         prior(θ) = insupport(θ) ? 1. : 0.
         proposal = θ -> Proposal(θ, tuning, Σp)
         obj = θ -> -objective(θ, simdata, θtcn, S, dgp, dtY)
-        @time chain = mcmc(θtcn, length, burnin, prior, obj, proposal, verbosity, nthreads)
+    @time chain = mcmc(θtcn, length, burnin, prior, obj, proposal, verbosity, nthreads)
         chain = Chains(chain[:,1:2], names)
         display(plot(chain))
         display(chain)
