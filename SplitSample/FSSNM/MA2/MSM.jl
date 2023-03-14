@@ -38,24 +38,37 @@ end
 
 @inbounds function main()
     n = 100 # sample size
-    reps = 100
+    reps = 1000
+    results = zeros(reps,6)
     dgp = Ma2(N=base_n)
     dtY = maketransform(dgp)
     names = ["θ₁", "θ₂"]
     S = 50 # reps used to evaluate objective
+    # allocate containers once
+    simdata1 = zeros(1, 1, n)
+    shocks1 = randn(1, 1, n+2)
+    simdata = zeros(1, S, n) # make buffer for simdata
+    shocks = randn(1, S, n+2) # make the fixed random draws
+    θtcn = zeros(3)
+    obj = θ -> insupport(θ) ? objective(θ, θtcn, simdata, shocks, dtY) : Inf
     for rep = 1:reps
         # true params to estimate
-        θtrue::Vector{Float64} = vec(priordraw(dgp, 1))
-        simdata1 = zeros(1, 1, n)
-        shocks1 = randn(1, 1, n+2)
-        θtcn::Vector{Float64} = vec(simstat(θtrue, simdata1, shocks1, dtY))# the sample statistic
+        θtrue = vec(priordraw(dgp, 1))
+        simdata1 .= zeros(1, 1, n)
+        shocks1 .= randn(1, 1, n+2)
+        θtcn = vec(simstat(θtrue, simdata1, shocks1, dtY))# the sample statistic
         # now do MSM
-        simdata = zeros(1, S, n) # make buffer for simdata
-        shocks = randn(1, S, n+2) # make the fixed random draws
-        obj = θ -> insupport(θ) ? objective(θ, θtcn, simdata, shocks, dtY) : Inf
-        θmsm = optimize(obj, θtcn, NelderMead()).minimizer
+        simdata .= zeros(1, S, n) # make buffer for simdata
+        shocks .= randn(1, S, n+2) # make the fixed random draws
+        @time θmsm = optimize(obj, θtcn, NelderMead()).minimizer
         println(@green "results:")
         pretty_table(hcat(θtrue, θtcn, θmsm); header = ["θtrue", "θtcn", "θmsm"])
+        results[rep,:] = vcat(θtrue, θtcn, θmsm)
+        println(@cyan "rep $rep, average rmse θmsm:")
+        display(mean(sqrt.(mean(abs2, results[1:rep, 5:6] - results[1:rep, 1:2], dims = 1))))
+        println(@yellow "rep $rep, average rmse θtcn:")
+        display(mean(sqrt.(mean(abs2, results[1:rep, 3:4] - results[1:rep, 1:2], dims = 1))))
     end
+    writedlm("results_$S.txt", results)
 end
 
