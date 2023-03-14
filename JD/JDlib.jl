@@ -156,9 +156,18 @@ function TrueParameters()
     return [μ, κ, α, σ, ρ, λ0, λ1, τ]
 end
 
+#=
 function PriorSupport()
     lb = [-0.1, 0.001, -6.0, 0.5, -0.99, -0.02,  2.0, -0.02]
     ub = [0.1,  0.2, -2.0, 1.5,  -0.5, 0.05, 5.0, 0.05]
+    lb,ub
+end    
+=#
+# remove drift (demean returns before using)
+# and limit prior based on previous results
+function PriorSupport()
+    lb = [0., 0.08, -3.5, 0.5, -0.95, -0.02,  2.0, -0.02]
+    ub = [0.,  0.17, -2.1, 1.0,  -0.65, 0.03, 5.0, 0.02]
     lb,ub
 end    
 
