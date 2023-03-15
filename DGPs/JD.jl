@@ -5,9 +5,11 @@ end
 # ----- Model-specific utilities -----------------------------------------------
 isweekday(d::Int)::Bool = (d % 7) % 6 != 0
 
+# [μ; κ; α; σ; ρ; λ₀; λ₁; τ]
 θbounds(::JD) = (
-    Float32[-.1, .001, -6, .5, -.99, -.02, 2, -.02], 
-    Float32[.1, .2, -2, 1.5, -.5, .05, 5, .05]
+    #         μ,    κ,    α,   σ,    ρ,    λ₀, λ₁,    τ   
+    Float32[-.05, .05, -3.5,  .5, -.95,  .000,  2, -.02], 
+    Float32[ .07, .20, -1.5, 1.1, -.50,  .035,  5,  .03]
 )
 
 function diffusion(μ,κ,α,σ,ρ,u0,tspan)
@@ -79,8 +81,11 @@ end
         p₋₁ = p[end]
         lnP_trading[t] = p[end]
     end
-
-    permutedims([diff(lnP_trading[1:end]) rv[2:end] π/2 .* bv[2:end]])
+    logret = diff(lnP_trading)
+    if any(abs.(logret) .> log(10)) 
+        global test_count += 1
+    end
+    permutedims([logret rv[2:end] π/2 .* bv[2:end]])
 end
 
 # ----- DGP necessary functions ------------------------------------------------

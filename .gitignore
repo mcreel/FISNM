@@ -25,3 +25,5 @@ Manifest.toml
 ./Paper
 
 .vscode/
+
+data/
