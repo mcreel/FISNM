@@ -81,11 +81,8 @@ end
         p₋₁ = p[end]
         lnP_trading[t] = p[end]
     end
-    logret = diff(lnP_trading)
-    if any(abs.(logret) .> log(10)) 
-        global test_count += 1
-    end
-    permutedims([logret rv[2:end] π/2 .* bv[2:end]])
+    
+    permutedims([diff(lnP_trading) rv[2:end] π/2 .* bv[2:end]])
 end
 
 # ----- DGP necessary functions ------------------------------------------------
