@@ -78,6 +78,107 @@ function train_cnn!(
     end
 end
 
+
+# Train a convolutional neural network using pre-generated BSONs
+function train_cnn_from_datapath!(
+    m, opt, dgp, dtY;
+    datapath, statsfile, batchsize=32, passes_per_batch=1, dev=cpu, loss=rmse_conv,
+    validation_loss=true, validation_frequency=10, validation_size=2_000, verbosity=1, 
+    transform=true, epochs=1_000, use_logs=false
+)
+    Flux.trainmode!(m) # In case we have dropout / layer normalization
+    θ = Flux.params(m) # Extract parameters
+    best_model = deepcopy(m) 
+    best_loss = Inf
+
+    # files = readdir(datapath)
+    BSON.@load statsfile μs σs qminP qmaxP qRV qBV lnμs lnσs qlnBV qlnRV
+    function restrict_data(X, Y, use_logs=use_logs)
+        if use_logs
+            X = cat(X[:, :, 1:1, :], log.(X[:, :, 2:3, :]), dims=3)
+            μs = lnμs
+            σs = lnσs
+            qBV = qlnBV
+            qRV = qlnRV
+        end
+        # Indexes where prices exceed
+        csX = cumsum(X[:, :, 1, :], dims=2)
+        idxP = (sum(csX .< qminP, dims=[1,2]) + sum(csX .> qmaxP, dims=[1,2])) |> vec .== 0
+        X = X[:, :, :, idxP]
+        Y = Y[:, idxP]
+        # Indexes where RV exceeds
+        idxRV = sum(X[:, :, 2, :] .> qRV, dims=[1,2]) |> vec .==0
+        X = X[:, :, :, idxRV]
+        Y = Y[:, idxRV]
+        # Indexes where BV exceeds threshold
+        idxBV = sum(X[:, :, 3, :] .> qBV, dims=[1,2]) |> vec .== 0
+        (X[:, :, :, idxBV] .- μs) ./ σs, Y[:, idxBV]
+    end
+
+
+    # Create a validation set to compute and keep track of losses
+    if validation_loss
+        Xv, Yv = generate(dgp, validation_size, dev=cpu)
+        # Want to see validation RMSE on original scale => no rescaling
+        Xv = tabular2conv(Xv)
+        Xv, Yv = map(dev, restrict_data(Xv, Yv))
+        losses = zeros(epochs)
+    end
+
+    # Compute pre-training loss
+    Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
+    pre_train_loss = loss(Ŷ, Yv)
+    @info "Pre training:" pre_train_loss
+
+    for epoch ∈ 1:epochs
+        # TODO: why is this needed?
+        GC.gc(true)
+        CUDA.reclaim()
+        # Load matching file (TODO: CHANGE THIS!!)
+        BSON.@load joinpath(datapath, "$epoch.bson") X Y
+        X, Y = restrict_data(X, Y)
+        # Pass to device
+        X, Y = map(dev, [X, Y])
+        # Standardize Ys
+        transform && StatsBase.transform!(dtY, Y)
+
+        dl = Flux.DataLoader((X, Y), batchsize=min(batchsize, size(Y, 2)))
+
+        for passes_per_batch ∈ 1:passes_per_batch
+            for (xb, yb) ∈ dl
+                ∇ = gradient(θ) do 
+                    loss(m(xb), yb)
+                end
+                Flux.update!(opt, θ, ∇)
+            end
+        end
+
+        # Compute validation loss and print status if verbose
+        # Do this for the last 100 epochs, too, in case frequency is low
+        if validation_loss && (epoch % validation_frequency == 0)
+            Flux.testmode!(m)
+            Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
+            current_loss = loss(Ŷ, Yv)
+            if current_loss < best_loss
+                best_loss = current_loss
+                best_model = deepcopy(cpu(m))
+            end
+            losses[epoch] = current_loss
+            Flux.trainmode!(m)
+            epoch % verbosity == 0 && @info "$epoch / $epochs" best_loss current_loss
+        else
+            epoch % verbosity == 0 && @info "$epoch / $epochs"
+        end
+    end
+    # Return losses if tracked
+    if validation_loss
+        losses, best_model
+    else
+        nothing
+    end
+end
+
+
 function train_tcn(; 
     DGPFunc, N, modelname, runname,
     # Sizes and seeds
@@ -90,7 +191,7 @@ function train_tcn(;
 
     # Training parameters
     epochs = 200_000,             # The number of epochs used to train the model
-    batchsize = 2048,             # The number of samples used in each batch
+    batchsize = 1024,             # The number of samples used in each batch
     passes_per_batch = 1,        # The number of passes of gradient descent on each batch
     validation_frequency = 5000,   # Every X epochs, we validate the model (and keep track of the best)
     validation_loss = true,      # Whether we validate or not
@@ -112,6 +213,8 @@ function train_tcn(;
     # Get the data transform for the DGP parameters
     Random.seed!(transform_seed)
     dtY = data_transform(dgp, transform_size, dev=dev)
+
+    priordraw(dgp, 1)
 
     # Create arrays for error tracking
     err = zeros(nparams(dgp), test_size, length(N))
