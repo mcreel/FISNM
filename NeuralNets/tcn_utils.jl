@@ -142,13 +142,16 @@ function train_cnn_from_datapath!(
         # Standardize Ys
         transform && StatsBase.transform!(dtY, Y)
 
-        dl = Flux.DataLoader((X, Y), batchsize=min(batchsize, size(Y, 2)))
-
+        # ----- Training ---------------------------------------------
         for passes_per_batch ∈ 1:passes_per_batch
+            dl = Flux.DataLoader((X, Y), batchsize=min(batchsize, size(Y, 2)),
+                shuffle=true)
+            # Compute loss and gradients
             for (xb, yb) ∈ dl
                 ∇ = gradient(θ) do 
                     loss(m(xb), yb)
                 end
+                # Take gradient descent step
                 Flux.update!(opt, θ, ∇)
             end
         end
