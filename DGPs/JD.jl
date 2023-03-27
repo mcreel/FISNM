@@ -104,8 +104,8 @@ end
 
 @views function generate(θ::Vector{Float32}, d::JD, S::Int)
     # insupport(d, θ...) || throw(ArgumentError("θ is not in support"))
-    Threads.@threads x = zeros(Float32, d.N, 3, S)
-    for s ∈ axes(x, 3)
+    x = zeros(Float32, d.N, 3, S)
+    Threads.@threads for s ∈ axes(x, 3)
         x[:, :, s] = simulate_jd(θ, d.N)
     end
     permutedims(x, (2, 3, 1))
