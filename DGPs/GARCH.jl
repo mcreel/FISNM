@@ -4,7 +4,8 @@ end
 
 # ----- Model-specific utilities -----------------------------------------------
 # the likelihood function, alternative version with reparameterization
-function simulate_garch(lrv::Float32, βplusα::Float32, share::Float32, n::Int)
+function simulate_garch(
+    lrv::Float32, βplusα::Float32, share::Float32, n::Int)
     ω = (1f0 - βplusα) * lrv
     β = share * βplusα
     α = (1f0 - share) * βplusα
@@ -24,6 +25,8 @@ end
 
 θbounds(::GARCH) = (Float32[.0001, 0, 0], Float32[1, .99, 1])
 
+insupport(::GARCH, lrv::Float32, βplusα::Float32, share::Float32) = 
+    (0 < lrv < 1) && (0 < βplusα < 1) && (0 < share < 1)
 # ----- DGP necessary functions ------------------------------------------------
 
 # GARCH is parameterized in terms of long run variance β+α, and β's share of β+α
@@ -33,14 +36,25 @@ priordraw(d::GARCH, S::Int) = uniformpriordraw(d, S) # [lrv; β+α; share]
 # Returns are: (K × S × N), (P × S)
 @views function generate(d::GARCH, S::Int)
     y = priordraw(d, S)
-    x = zeros(Float32, 1, S, d.N) # the Garch data for each sample
+    x = zeros(Float32, d.N, S) # the Garch data for each sample
 
-    Threads.@threads for s ∈ axes(x, 2)
-        x[1, s, :] = simulate_garch(y[:, s]..., d.N)
+    @inbounds Threads.@threads for s ∈ axes(x, 2)
+        x[:, s] .= simulate_garch(y[:, s]..., d.N)
     end
 
-    x, y
+    permutedims(reshape(x, 1, d.N, S), (1, 3, 2)), y
 end
+
+@views function generate(θ::Vector{Float32}, d::GARCH, S::Int)    
+    insupport(d, θ...) || throw(ArgumentError("θ is not in support"))
+    x = zeros(Float32, d.N, S) # the Garch data for each sample
+    Threads.@threads for s ∈ axes(x, 2)
+        x[:, s] .= simulate_garch(θ..., d.N)
+    end
+    # Add a dimension to x and return
+    permutedims(reshape(x, 1, d.N, S), (1, 3, 2))
+end
+
 
 nfeatures(::GARCH) = 1
 nparams(::GARCH) = 3

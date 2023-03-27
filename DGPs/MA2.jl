@@ -5,7 +5,9 @@ end
 # ----- Model-specific utilities -----------------------------------------------
 insupport(::MA2, θ₁, θ₂) = (-2 < θ₁ < 2) && (-1 < θ₂ < 1) && (θ₂ - abs(θ₁) > -1)
 
-function simulate_ma2(θ₁::Float32, θ₂::Float32, n::Int)
+function simulate_ma2(
+    θ₁::Float32, θ₂::Float32, n::Int
+)
     ϵ = randn(Float32, n+2)
     ϵ[3:end] .+ θ₁ .* ϵ[2:end-1] .+ θ₂ .* ϵ[1:end-2]
 end
@@ -41,7 +43,6 @@ end
 # Use rejection sampling to stay inside identified region
 @views function priordraw(d::MA2, S::Int)::Matrix{Float32}
     θ = zeros(Float32, 2, S)
-
     Threads.@threads for i ∈ axes(θ, 2)
         ok = false
         θ₁ = 0f0
@@ -61,13 +62,22 @@ end
 # Returns are: (K × S × N), (P × S)
 @views function generate(d::MA2, S::Int)
     y = priordraw(d, S)
-    x = zeros(Float32, 1, S, d.N)
-
-    Threads.@threads for s ∈ axes(x, 2)
-        x[1, s, :] = simulate_ma2(y[:, s]..., d.N)
+    x = zeros(Float32, d.N, S)
+    @inbounds Threads.@threads for s ∈ axes(x, 2)
+        x[:, s] = simulate_ma2(y[:, s]..., d.N)
     end
 
-    x, y
+    permutedims(reshape(x, 1, d.N, S), (1, 3, 2)), y
+end
+
+@views function generate(θ::Vector{Float32}, d::MA2, S::Int)
+    insupport(d, θ...) || throw(ArgumentError("θ is not in support"))
+    x = zeros(Float32, d.N, S)
+    @inbounds Threads.@threads for s ∈ axes(x, 2)
+        x[:, s] = simulate_ma2(θ..., d.N)
+    end
+
+    permutedims(reshape(x, 1, d.N, S), (1, 3, 2))
 end
 
 nfeatures(::MA2) = 1

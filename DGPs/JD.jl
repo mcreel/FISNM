@@ -12,6 +12,8 @@ isweekday(d::Int)::Bool = (d % 7) % 6 != 0
     Float32[ .07, .20, -1.5, 1.1, -.50,  .035,  5,  .03]
 )
 
+insupport(::JD, θ...) = true # TODO
+
 function diffusion(μ,κ,α,σ,ρ,u0,tspan)
     f = function (du,u,p,t)
         du[1] = μ # drift in log prices
@@ -27,7 +29,7 @@ function diffusion(μ,κ,α,σ,ρ,u0,tspan)
 end
 
 
-@views function simulate_jd(θ, n::Int, burnin::Int=100)
+@views function simulate_jd(θ, n::Int; seed=5, burnin::Int=100)
     trading_days = n # TODO: slightly ugly.
     days = round(Int, 1.4 * (trading_days + burnin)) # Add weekends (x + x/5*2 = 1.4x)
     min_per_day = 1_440 # Minutes per day
@@ -55,7 +57,9 @@ end
     jump_prob = JumpProblem(prob, Direct(), jump)
 
     # Do the simulation
-    sol = solve(jump_prob, SRIW1(), dt=dt, adaptive=false)
+    sol = isnothing(seed) ? solve(
+        jump_prob, SRIW1(), dt=dt, adaptive=false) : solve(
+            jump_prob, SRIW1(), dt=dt, adaptive=false, seed=seed)
 
     # Get log price, with measurement error 
     # Trick: we only need very few log prices, 39 per trading day, use smart filtering
@@ -82,23 +86,32 @@ end
         lnP_trading[t] = p[end]
     end
     
-    permutedims([diff(lnP_trading) rv[2:end] π/2 .* bv[2:end]])
+    [diff(lnP_trading) rv[2:end] π/2 .* bv[2:end]]
 end
+
 
 # ----- DGP necessary functions ------------------------------------------------
 priordraw(d::JD, S::Int) = uniformpriordraw(d, S) # [μ; κ; α; σ; ρ; λ₀; λ₁; τ]
 
 @views function generate(d::JD, S::Int)
     y = priordraw(d, S)
-    x = zeros(Float32, 3, S, d.N)
-
-    Threads.@threads for s ∈ axes(x, 2)
-        x[:, s, :] = simulate_jd(y[:, s], d.N)
+    x = zeros(Float32, d.N, 3, S)
+    Threads.@threads for s ∈ axes(x, 3)
+        x[:, :, s] = simulate_jd(y[:, s], d.N)
     end
+    permutedims(x, (2, 3, 1)), y
+end
 
-    x, y
+@views function generate(θ::Vector{Float32}, d::JD, S::Int)
+    # insupport(d, θ...) || throw(ArgumentError("θ is not in support"))
+    Threads.@threads x = zeros(Float32, d.N, 3, S)
+    for s ∈ axes(x, 3)
+        x[:, :, s] = simulate_jd(θ, d.N)
+    end
+    permutedims(x, (2, 3, 1))
 end
 
 
 nfeatures(::JD) = 3
 nparams(::JD) = 8
+
