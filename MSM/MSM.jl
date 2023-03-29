@@ -19,6 +19,7 @@ function objective(
     sum(abs2, θ̂ₓ - θ̂ₛ) # MSE of data and simulated moments
 end
 
+
 function msm(
     dgp::DGP; 
     S::Int, dtθ, model, M::Int=10, verbosity::Int=0, show_trace::Bool=false
