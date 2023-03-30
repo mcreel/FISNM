@@ -29,7 +29,7 @@ function diffusion(μ,κ,α,σ,ρ,u0,tspan)
 end
 
 
-@views function simulate_jd(θ, n::Int; seed=5, burnin::Int=100)
+@views function simulate_jd(θ, n::Int; burnin::Int=100)
     trading_days = n # TODO: slightly ugly.
     days = round(Int, 1.4 * (trading_days + burnin)) # Add weekends (x + x/5*2 = 1.4x)
     min_per_day = 1_440 # Minutes per day
@@ -57,9 +57,7 @@ end
     jump_prob = JumpProblem(prob, Direct(), jump)
 
     # Do the simulation
-    sol = isnothing(seed) ? solve(
-        jump_prob, SRIW1(), dt=dt, adaptive=false) : solve(
-            jump_prob, SRIW1(), dt=dt, adaptive=false, seed=seed)
+    sol = solve(jump_prob, SRIW1(), dt=dt, adaptive=false)
 
     # Get log price, with measurement error 
     # Trick: we only need very few log prices, 39 per trading day, use smart filtering
