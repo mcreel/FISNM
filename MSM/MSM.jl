@@ -6,7 +6,7 @@ function simmoments(tcn, dgp::DGP, S::Int, θ::Vector{Float32}; dtθ)
 end
 
 # Objective function
-function objective(
+function msm_objective(
     θ̂ₓ::Vector{Float32}, θ⁺::Vector{Float32};
     tcn, S::Int, dtθ, seed::Union{Nothing, Int}=nothing
 )
@@ -35,7 +35,7 @@ function msm(
         θ̂ₓ = model(X₀) |> m -> mean(StatsBase.reconstruct(dtθ, m), dims=2) |> vec
         # MSM estimate
         seed = abs(rand(Int64))
-        θ̂ₘₛₘ = optimize(θ⁺ -> objective(
+        θ̂ₘₛₘ = optimize(θ⁺ -> msm_objective(
             θ̂ₓ, θ⁺, tcn=model, S=S, dtθ=dtθ, seed=seed), θ̂ₓ, NelderMead(),
             Optim.Options(show_trace=show_trace)).minimizer
         θmat[:, i] = vcat(θ₀, θ̂ₓ, θ̂ₘₛₘ)

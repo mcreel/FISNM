@@ -17,7 +17,7 @@ generate(d::DGP, S::Int; dev=cpu) = map(dev, generate(d, S))
 # Generate prior parameters according to uniform with lower and upper bounds
 function uniformpriordraw(d::DGP, S::Int)
     lb, ub = θbounds(d)
-    (ub .- lb) .* rand(Float32, length(lb), S) .+ lb 
+    (ub .- lb) .* rand(Float32, size(lb, 1), S) .+ lb 
 end
 
 # Expected absolute error when using the prior mean as prediction 
