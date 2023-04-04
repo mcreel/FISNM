@@ -25,7 +25,7 @@ tcn = BSON.load("models/MA2/23-02-11_(n-$N).bson")[:best_model];
 Flux.testmode!(tcn);
 
 # Run MSM and return predictions (matrix size M × |θ|) with each row [θ₀ θtcn θmsm]
-θs = msm(dgp, S=10, dtθ=dtθ, model=tcn, M=10, verbosity=2)
+θs = msm(dgp, S=10, dtθ=dtθ, model=tcn, M=10, verbosity=2, show_trace=true)
 
 # Final armse
 armse_tcn = sqrt(mean(abs2, (θs[:, 1:2] .- θs[:, 3:4])))
@@ -57,4 +57,4 @@ BSON.@load "statistics.bson" μs σs qminP qmaxP qRV qBV lnμs lnσs qlnBV qlnRV
 tcn = xs -> (xs .- μs) ./ σs |> best_model; # Add standardization in front
 
 # Run MSM and return predictions (matrix size M × |θ|) with each row [θ₀ θtcn θmsm]
-θs = msm(dgp, S=10, dtθ=dtθ, model=tcn, M=1, verbosity=1, show_trace=true)
+θs = msm(dgp, S=10, dtθ=dtθ, model=tcn, M=20, verbosity=1, show_trace=true)

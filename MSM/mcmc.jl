@@ -49,89 +49,107 @@ end
     perthread = reps ÷ nthreads
     chain = zeros(reps, size(θ,1)+1)
     Threads.@threads for t = 1:nthreads # collect the results from the threads
-        chain[t*perthread-perthread+1:t*perthread,:] = mcmc(θ, perthread, burnin, Prior, lnL, Proposal, report) 
+        chain[t*perthread-perthread+1:t*perthread,:] = <(θ, perthread, burnin, Prior, lnL, Proposal, report) 
     end    
     return chain
 end
 
-
-# method symmetric proposal
-# the main loop
-@views function mcmc(θ, reps::Int64, burnin::Int64, Prior::Function, lnL::Function, Proposal::Function, report::Bool=true)
-    reportevery = Int((reps+burnin)/10)
-    lnLθ = lnL(θ)
-    chain = zeros(reps, size(θ,1)+1)
-    naccept = zeros(size(θ))
-    for rep = 1:reps+burnin
-        θᵗ = Proposal(θ) # new trial value
-        if report
-            changed = Int.(.!(θᵗ .== θ)) # find which changed
-        end    
-        # MH accept/reject: only evaluate logL if proposal is in support of prior (avoid crashes)
-        pt = Prior(θᵗ)
-        accept = false
-        if pt > 0.0
-            lnLθᵗ = lnL(θᵗ)
-            accept = rand() < exp(lnLθᵗ-lnLθ) * pt/Prior(θ)
-            if accept
-                θ = θᵗ
-                lnLθ = lnLθᵗ 
-            end
+@views function adjusting_mcmc(
+    θ; # TODO: prior?
+    Lₙ::Function, proposal::Function, burnin::Int=100, N::Int=1_000,
+    acceptance_threshold::Tuple{Float32,Float32}=(1f-1, 4f-1),
+    std_adjustment_factor::Float32=1.2f0,
+    std_adjustment_step::Int=100,
+    curstd::Float32=1f0,
+    verbosity::Int=10
+)
+    prop = θ⁺ -> proposal(θ⁺, curstd)
+    Lₙθ = Lₙ(θ) # Objective at data moments value
+    naccept = 0 # Number of acceptance / rejections
+    accept = false
+    acceptance_rate = 1f0
+    chain = zeros(N, size(θ, 1) + 1)
+    for i ∈ 1:burnin+N
+        θᵗ = prop(θ) # new trial value
+        Lₙθᵗ = Lₙ(θᵗ) # Objective at trial value
+        # Accept / reject trial value
+        accept = rand() < exp(Lₙθᵗ - Lₙθ)
+        if accept
+        # Replace values
+            θ = θᵗ
+            Lₙθ = Lₙθᵗ
+            # Increment number of accepted values
+            naccept += 1
         end
-        if report
-            naccept = naccept .+ changed .* Int.(accept)
-        end    
-        if (mod(rep,reportevery)==0 && report)
-            println("current parameters: ", round.(θ,digits=3))
-            println("  acceptance rates: ", round.(naccept/reportevery,digits=3))
-            naccept = naccept - naccept
-        end    
-        if rep > burnin
-            chain[rep-burnin,:] = vcat(θ, accept)
-        end    
+
+        # Add to chain if burnin is passed
+        if i > burnin
+            chain[i-burnin,:] = vcat(θ, accept)
+        end
+
+        # Adjust proposal variance
+        if i % std_adjustment_step == 0
+            # Compute acceptance rate
+            acceptance_rate = naccept / std_adjustment_step
+            @info "n=$i" curstd acceptance_rate
+            # Adjust proposal variance if acceptance rate is too high or too low
+            if acceptance_rate < acceptance_threshold[1]
+                curstd *= (1 / std_adjustment_factor)
+                @info "Proposal variance decreased" curstd
+            elseif acceptance_rate > acceptance_threshold[2]
+                curstd *= std_adjustment_factor
+                @info "Proposal variance increased" curstd
+            end
+            prop = θ⁺ -> proposal(θ⁺, curstd)
+            # Reset acceptance rate
+            naccept = 0
+        end
+
+        # Report
+        if verbosity > 0 && mod(i, verbosity) == 0
+            @info "Current parameters" round.(θ, digits=3)' acceptance_rate
+        end
     end
     return chain
 end
 
-#=
-# the main loop
-function mcmc(θ, reps, burnin, Prior, lnL, Proposal::Function, ProposalDensity::Function, report=true::Bool)
-    reportevery = Int((reps+burnin)/10)
-    lnLθ = lnL(θ)
-    chain = zeros(reps, size(θ,1)+1)
-    naccept = zeros(size(θ))
-    for rep = 1:reps+burnin
-        θᵗ = Proposal(θ) # new trial value
-        if report
-            changed = Int.(.!(θᵗ .== θ)) # find which changed
-        end    
-        # MH accept/reject: only evaluate logL if proposal is in support of prior (avoid crashes)
-        pt = Prior(θᵗ)
-        accept = false
-        if pt > 0.0
-            lnLθᵗ = lnL(θᵗ)
-            accept = rand() < 
-            exp(lnLθᵗ-lnLθ)*
-            pt/Prior(θ)*
-            ProposalDensity(θ,θᵗ)/ProposalDensity(θᵗ,θ)
-            if accept
-                θ = θᵗ
-                lnLθ = lnLθᵗ 
-            end
+@views function mcmc(
+    θ; # TODO: prior?
+    Lₙ::Function, proposal::Function, burnin::Int=100, N::Int=1_000,
+    verbosity::Int=10
+)
+    Lₙθ = Lₙ(θ) # Objective at data moments value
+    naccept = 0 # Number of acceptance / rejections
+    accept = false
+    acceptance_rate = 1f0
+    chain = zeros(N, size(θ, 1) + 1)
+    for i ∈ 1:burnin+N
+        θᵗ = proposal(θ) # new trial value
+        Lₙθᵗ = Lₙ(θᵗ) # Objective at trial value
+
+        # Accept / reject trial value
+        # ap = exp(Lₙθᵗ - Lₙθ)
+        # @info "Acceptance probability:" ap
+        accept = rand() < exp(Lₙθᵗ - Lₙθ)
+        if accept
+        # Replace values
+            θ = θᵗ
+            Lₙθ = Lₙθᵗ
+            # Increment number of accepted values
+            naccept += 1
         end
-        if report
-            naccept = naccept .+ changed .* Int.(accept)
-        end    
-        if (mod(rep,reportevery)==0 && report)
-            println("current parameters: ", round.(θ,digits=3))
-            println("  acceptance rates: ", round.(naccept/reportevery,digits=3))
-            naccept = naccept - naccept
-        end    
-        if rep > burnin
-            chain[rep-burnin,:] = [θ; accept]
-        end    
+
+        # Add to chain if burnin is passed
+        if i > burnin
+            chain[i-burnin,:] = vcat(θ, accept)
+        end
+
+        # Report
+        if verbosity > 0 && mod(i, verbosity) == 0
+            acceptance_rate = naccept / verbosity
+            @info "Current parameters" round.(θ, digits=3)' acceptance_rate
+            naccept = 0
+        end
     end
     return chain
 end
-=#
-
