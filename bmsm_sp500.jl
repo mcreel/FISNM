@@ -20,7 +20,7 @@ include("MSM/BMSM.jl")
 
 
 # Whether or not to use the model that was trained on log-transformed data
-use_logs = false 
+use_logs = true 
 
 # Outside of the main() function due to world age issues
 best_model = use_logs ? BSON.load("models/JD/best_model_ln_bs256_10k.bson")[:best_model] :
@@ -35,6 +35,9 @@ burnin = 100 # Burn-in steps
 covreps = 500 # Number of repetitions to estimate the proposal covariance
 verbosity = 50 # MCMC verbosity
 filename = "chain_230404.bson"
+
+# Tuning parameter (TODO: parameter under logs still unclear)
+δ = use_logs ? 1f-3 : 15f-2
 
 
 @info "Loading data, preparing model..."
@@ -75,9 +78,6 @@ dtθ = data_transform(dgp, 100_000);
 # Covariance of the proposal
 _, Σp = simmomentscov(tcn, dgp, covreps, θ̂ₓ, dtθ=dtθ)
 Σp = cholesky(Σp).L
-
-# Tuning parameter (TODO: parameter under logs still unclear)
-δ = use_logs ? 1f-2 : 1f-1
 
 @info "Running MCMC..."
 prop = θ⁺ -> proposal(θ⁺, δ, Σp)
