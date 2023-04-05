@@ -1,19 +1,30 @@
 using StatsPlots
 include("mcmc.jl")
 
+# method to keep fixed weight matrix
+function simmoments(tcn, dgp::DGP, S::Int, θ::Vector{Float32}; dtθ)
+    # Computes moments according to the TCN for a given DGP, θ, and S
+    X = tabular2conv(generate(θ, dgp, S)) # Generate data
+    # Compute average simulated moments
+    m = StatsBase.reconstruct(dtθ, tcn(X))
+    return mean(m, dims=2)[:]
+end
+
+# method for CUE
 function simmomentscov(tcn, dgp::DGP, S::Int, θ::Vector{Float32}; dtθ)
     # Computes moments according to the TCN for a given DGP, θ, and S
     X = tabular2conv(generate(θ, dgp, S)) # Generate data
-     # Compute average simulated moments
+    # Compute average simulated moments
     m = StatsBase.reconstruct(dtθ, tcn(X))
     return mean(m, dims=2)[:], Symmetric(cov(m'))
 end
 
 # MVN random walk, or occasional draw from prior
 @inbounds function proposal(current, δ, Σ)
-    current + δ * Σ * randn(Float32, size(current))
+    Float32.(rand(MvNormal(current, δ .* Σ)))
 end
    
+# CUE objective
 # objective function for Bayesian MSM: MSM with efficient weight
 @inbounds function bmsmobjective(
     θ̂ₓ::Vector{Float32}, θ⁺::Vector{Float32};
@@ -23,10 +34,27 @@ end
     insupport(dgp, θ⁺...) || return Inf
     # Compute simulated moments
     θ̂ₛ, Σₛ = simmomentscov(tcn, dgp, S, θ⁺, dtθ=dtθ)
-    W = inv(Σₛ)
+    W = inv((1.0 + 1.0/S) .* Σₛ)
     err = θ̂ₓ - θ̂ₛ 
     dot(err, W, err)
 end
+
+# two step MSM objective
+# objective function for Bayesian MSM: MSM with efficient weight
+@inbounds function bmsmobjective(
+    θ̂ₓ::Vector{Float32}, θ⁺::Vector{Float32}, Σinv;
+    tcn, S::Int, dtθ, dgp
+)        
+    # Make sure the solution is in the support
+    insupport(dgp, θ⁺...) || return Inf
+    # Compute simulated moments
+    θ̂ₛ =  simmoments(tcn, dgp, S, θ⁺, dtθ=dtθ)
+    err = Float32(sqrt(1000.)) * (θ̂ₓ - θ̂ₛ)
+    dot(err, Σinv, err)
+end
+
+
+
 
 # Bayesian MSM, following Chernozhukov and Hong, 2003
 function bmsm(

@@ -20,7 +20,7 @@ include("MSM/BMSM.jl")
 
 
 # Whether or not to use the model that was trained on log-transformed data
-use_logs = true 
+use_logs = false
 
 # Outside of the main() function due to world age issues
 best_model = use_logs ? BSON.load("models/JD/best_model_ln_bs256_10k.bson")[:best_model] :
@@ -29,20 +29,23 @@ best_model = use_logs ? BSON.load("models/JD/best_model_ln_bs256_10k.bson")[:bes
 function main()
 
 transform_seed = 1204
-S = 200 # Simulations to estimate moments
+S = 10 # Simulations to estimate moments
 N = 5_000 # MCMC chain length
 burnin = 100 # Burn-in steps
 covreps = 500 # Number of repetitions to estimate the proposal covariance
-verbosity = 50 # MCMC verbosity
+verbosity = 10 # MCMC verbosity
 filename = "chain_230404.bson"
 
 # Tuning parameter (TODO: parameter under logs still unclear)
-δ = use_logs ? 1f-3 : 15f-2
+#δ = use_logs ? 1f-3 : 15f-2
+δ = use_logs ? 1f-1 : 1f0
 
 
 @info "Loading data, preparing model..."
 # Read SP500 data and transform it to TCN-friendly format
 df = CSV.read("sp500.csv", DataFrame);
+df.rv = min.(df.rv, 5.)
+df.bv = min.(df.bv, 5.)
 X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
     x -> reshape(x, size(x)..., 1) |>
     x -> permutedims(x, (2, 3, 1)) |> 
@@ -73,15 +76,18 @@ dtθ = data_transform(dgp, 100_000);
 
 # Compute data moments
 θ̂ₓ = tcn(X₀) |> m -> mean(StatsBase.reconstruct(dtθ, m), dims=2) |> vec
-
 @info "Computing covariance of the proposal..."
 # Covariance of the proposal
 _, Σp = simmomentscov(tcn, dgp, covreps, θ̂ₓ, dtθ=dtθ)
-Σp = cholesky(Σp).L
-
+Σinv = inv(Σp*Float32(10000.0))
+display(θ̂ₓ)
+display(Σp)
+display(Σinv)
 @info "Running MCMC..."
-prop = θ⁺ -> proposal(θ⁺, δ, Σp)
-obj = θ⁺ -> -bmsmobjective(θ̂ₓ, θ⁺, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp)
+prop = θ⁺ -> rand(MvNormal(θ⁺,δ*Σp))
+
+#obj = θ⁺ -> -bmsmobjective(θ̂ₓ, θ⁺, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp)
+obj = θ⁺ -> -bmsmobjective(θ̂ₓ, θ⁺, Σinv, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp)
 chain = mcmc(θ̂ₓ, Lₙ=obj, proposal=prop, N=N, burnin=burnin, verbosity=verbosity)
 
 # Save chain
