@@ -38,7 +38,7 @@ filename = "chain_mc_2step.bson"
 
 # Tuning parameter (TODO: parameter under logs still unclear)
 #δ = use_logs ? 1f-3 : 15f-2
-δ = use_logs ? 1f-1 : 15f-1
+δ = use_logs ? 1f-1 : 30f-1
 
 
 @info "Loading data, preparing model..."
