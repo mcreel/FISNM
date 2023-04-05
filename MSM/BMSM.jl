@@ -31,7 +31,7 @@ end
     tcn, S::Int, dtθ, dgp
 )        
     # Make sure the solution is in the support
-    insupport(dgp, θ⁺...) || return Inf
+    insupport(dgp, θ⁺) || return Inf
     # Compute simulated moments
     θ̂ₛ, Σₛ = simmomentscov(tcn, dgp, S, θ⁺, dtθ=dtθ)
     W = inv((1.0 + 1.0/S) .* Σₛ)
@@ -46,7 +46,7 @@ end
     tcn, S::Int, dtθ, dgp
 )        
     # Make sure the solution is in the support
-    insupport(dgp, θ⁺...) || return Inf
+    insupport(dgp, θ⁺) || return Inf
     # Compute simulated moments
     θ̂ₛ =  simmoments(tcn, dgp, S, θ⁺, dtθ=dtθ)
     err = Float32(sqrt(1000.)) * (θ̂ₓ - θ̂ₛ)

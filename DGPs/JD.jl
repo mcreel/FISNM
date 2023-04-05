@@ -12,7 +12,10 @@ isweekday(d::Int)::Bool = (d % 7) % 6 != 0
     Float32[ .07, .20, -1.5, 1.1, -.50,  .035,  5,  .03]
 )
 
-insupport(::JD, θ...) = true # TODO
+function insupport(JD, θ)
+    lb, ub = θbounds(JD)
+    all(θ .>= lb) && all(θ .<=ub)
+end
 
 function diffusion(μ,κ,α,σ,ρ,u0,tspan)
     f = function (du,u,p,t)
