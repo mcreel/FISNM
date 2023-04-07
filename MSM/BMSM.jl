@@ -34,8 +34,8 @@ end
     insupport(dgp, θ⁺) || return Inf
     # Compute simulated moments
     θ̂ₛ, Σₛ = simmomentscov(tcn, dgp, S, θ⁺, dtθ=dtθ)
-    W = inv((1.0 + 1.0/S) .* Σₛ)
-    err = θ̂ₓ - θ̂ₛ 
+    W = Float32.(inv(10000*(1.0 + 1.0/S) * Σₛ))
+    err = Float32.(sqrt(1000.) * (θ̂ₓ - θ̂ₛ)) 
     dot(err, W, err)
 end
 

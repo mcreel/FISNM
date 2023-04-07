@@ -20,7 +20,7 @@ include("MSM/BMSM.jl")
 
 
 # Whether or not to use the model that was trained on log-transformed data
-use_logs = false
+use_logs = true
 
 # Outside of the main() function due to world age issues
 best_model = use_logs ? BSON.load("models/JD/best_model_ln_bs256_10k.bson")[:best_model] :
@@ -29,23 +29,23 @@ best_model = use_logs ? BSON.load("models/JD/best_model_ln_bs256_10k.bson")[:bes
 function main()
 
 transform_seed = 1204
-S = 10 # Simulations to estimate moments
+S = 100 # Simulations to estimate moments
 N = 1_000 # MCMC chain length
 burnin = 100 # Burn-in steps
 covreps = 500 # Number of repetitions to estimate the proposal covariance
 verbosity = 10 # MCMC verbosity
-filename = "chain_mc_2step.bson"
+filename = "chain_mc_2step_logs.bson"
 
 # Tuning parameter (TODO: parameter under logs still unclear)
 #δ = use_logs ? 1f-3 : 15f-2
-δ = use_logs ? 1f-1 : 20f-1
+δ = use_logs ? 3f-1 : 2f0
 
 
 @info "Loading data, preparing model..."
 # Read SP500 data and transform it to TCN-friendly format
 df = CSV.read("sp500.csv", DataFrame);
-df.rv = min.(df.rv, 5.)
-df.bv = min.(df.bv, 5.)
+#df.rv = min.(df.rv, 5.)
+#df.bv = min.(df.bv, 5.)
 X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
     x -> reshape(x, size(x)..., 1) |>
     x -> permutedims(x, (2, 3, 1)) |> 
@@ -76,18 +76,22 @@ dtθ = data_transform(dgp, 100_000);
 
 # Compute data moments
 θ̂ₓ = tcn(X₀) |> m -> mean(StatsBase.reconstruct(dtθ, m), dims=2) |> vec
+lb, ub = θbounds(JD(1000))
+ub[8] = 0.03
+θ̂ₓ = max.(θ̂ₓ, lb)
+θ̂ₓ = min.(θ̂ₓ, ub)
 @info "Computing covariance of the proposal..."
 # Covariance of the proposal
 _, Σp = simmomentscov(tcn, dgp, covreps, θ̂ₓ, dtθ=dtθ)
-Σinv = inv(Σp*Float32(10000.0))
+Σinv = inv(10000*Σp)
 display(θ̂ₓ)
 display(Σp)
 display(Σinv)
 @info "Running MCMC..."
 prop = θ⁺ -> rand(MvNormal(θ⁺,δ*Σp))
 
-#obj = θ⁺ -> -bmsmobjective(θ̂ₓ, θ⁺, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp)
-obj = θ⁺ -> -bmsmobjective(θ̂ₓ, θ⁺, Σinv, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp)
+obj = θ⁺ -> -bmsmobjective(θ̂ₓ, θ⁺, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp)
+#obj = θ⁺ -> -bmsmobjective(θ̂ₓ, θ⁺, Σinv, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp)
 chain = mcmc(θ̂ₓ, Lₙ=obj, proposal=prop, N=N, burnin=burnin, verbosity=verbosity)
 
 # Save chain

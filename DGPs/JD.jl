@@ -43,6 +43,7 @@ end
 
     # Solve the diffusion
     μ, κ, α, σ, ρ, λ₀, λ₁, τ = θ
+    τ = τ*(τ>0)  
     u₀ = [μ; α]
     prob = diffusion(μ, κ, α, σ, ρ, u₀, (0., days))
     λ₀⁺ = max(0, λ₀) # The prior allows for negative rate, to allow an accumulation at zero
