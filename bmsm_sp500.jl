@@ -45,15 +45,15 @@ function main()
 
 transform_seed = 1204
 S = 200 # Simulations to estimate moments
-N = 500 # MCMC chain length
+N = 10_000 # MCMC chain length
 burnin = 100 # Burn-in steps
 covreps = 500 # Number of repetitions to estimate the proposal covariance
 verbosity = 50 # MCMC verbosity
-filename = "chain_230415_logs.bson"
+filename = "chain_230415.bson"
 
 # # Tuning parameter (TODO: parameter under logs still unclear)
 # δ = use_logs ? 1f-3 : 15f-2
-δ = 5f-1
+δ = 4f0 #15f-1
 
 
 @info "Loading data, preparing model..."

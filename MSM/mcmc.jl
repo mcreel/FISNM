@@ -143,7 +143,6 @@ end
         if i > burnin
             chain[i-burnin,:] = vcat(θ, accept)
         end
-
         # Report
         if verbosity > 0 && mod(i, verbosity) == 0
             acceptance_rate = naccept / verbosity
