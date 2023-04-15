@@ -8,12 +8,12 @@ isweekday(d::Int)::Bool = (d % 7) % 6 != 0
 # [μ; κ; α; σ; ρ; λ₀; λ₁; τ]
 θbounds(::JD) = (
     #         μ,    κ,    α,   σ,    ρ,    λ₀, λ₁,    τ   
-    Float32[-.05, .03, -3.5,  .3, -.99,  -.02,  2, -.02], 
-    Float32[ .05, .20, -1.0, 1.1, -.50,   .05,  5,  .05]
+    Float32[-.05, .01, -10, 0.1, -.99,  -.02,  3, -.02], 
+    Float32[ .05, .30,   0, 4.0, -.50,   .05,  6,  .05]
 )
 
-function insupport(JD, θ)
-    lb, ub = θbounds(JD)
+function insupport(dgp::JD, θ)
+    lb, ub = θbounds(dgp)
     all(θ .>= lb) && all(θ .<=ub)
 end
 
@@ -43,6 +43,7 @@ end
 
     # Solve the diffusion
     μ, κ, α, σ, ρ, λ₀, λ₁, τ = θ
+    τ = max(0, τ) # The prior allows for negative measurement error, to allow an accumulation at zero
     u₀ = [μ; α]
     prob = diffusion(μ, κ, α, σ, ρ, u₀, (0., days))
     λ₀⁺ = max(0, λ₀) # The prior allows for negative rate, to allow an accumulation at zero

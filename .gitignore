@@ -27,4 +27,8 @@ Manifest.toml
 .vscode/
 
 data/
-data_old/
+data_old_1/
+data_old_2/
+data_old_3/
+data_clean/
+data_full/

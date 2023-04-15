@@ -1,9 +1,13 @@
 using StatsPlots
 include("mcmc.jl")
 
-function simmomentscov(tcn, dgp::DGP, S::Int, θ::Vector{Float32}; dtθ)
+function simmomentscov(tcn, dgp::DGP, S::Int, θ::Vector{Float32}; 
+    dtθ, preprocess::Union{Function,Nothing}=nothing)
     # Computes moments according to the TCN for a given DGP, θ, and S
-    X = tabular2conv(generate(θ, dgp, S)) # Generate data
+    X = tabular2conv(generate(θ, dgp, S)) # Generate data 
+    if !isnothing(preprocess)
+        X = preprocess(X)
+    end
      # Compute average simulated moments
     m = StatsBase.reconstruct(dtθ, tcn(X))
     return mean(m, dims=2)[:], Symmetric(cov(m'))
@@ -14,18 +18,31 @@ end
     current + δ * Σ * randn(Float32, size(current))
 end
    
-# objective function for Bayesian MSM: MSM with efficient weight
+# Continously updated MSM objective
 @inbounds function bmsmobjective(
     θ̂ₓ::Vector{Float32}, θ⁺::Vector{Float32};
-    tcn, S::Int, dtθ, dgp
+    tcn, S::Int, dtθ, dgp, preprocess::Union{Function,Nothing}=nothing
 )        
     # Make sure the solution is in the support
-    insupport(dgp, θ⁺...) || return Inf
+    insupport(dgp, θ⁺) || return Inf
     # Compute simulated moments
-    θ̂ₛ, Σₛ = simmomentscov(tcn, dgp, S, θ⁺, dtθ=dtθ)
+    θ̂ₛ, Σₛ = simmomentscov(tcn, dgp, S, θ⁺, dtθ=dtθ, preprocess=preprocess)
     W = inv(Σₛ)
     err = θ̂ₓ - θ̂ₛ 
     dot(err, W, err)
+end
+
+# Two-step MSM objective
+@inbounds function bmsmobjective(
+    θ̂ₓ::Vector{Float32}, θ⁺::Vector{Float32}, Σ⁻¹::AbstractMatrix{Float32};
+    tcn, S::Int, dtθ, dgp, preprocess::Union{Function,Nothing}=nothing
+)        
+    # Make sure the solution is in the support
+    insupport(dgp, θ⁺) || return Inf
+    # Compute simulated moments
+    θ̂ₛ = simmoments(tcn, dgp, S, θ⁺, dtθ=dtθ, preprocess=preprocess)
+    err = θ̂ₓ - θ̂ₛ 
+    dot(err, Σ⁻¹, err)
 end
 
 # Bayesian MSM, following Chernozhukov and Hong, 2003

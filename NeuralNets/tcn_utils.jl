@@ -82,39 +82,17 @@ end
 # Train a convolutional neural network using pre-generated BSONs
 function train_cnn_from_datapath!(
     m, opt, dgp, dtY;
-    datapath, statsfile, batchsize=32, passes_per_batch=1, dev=cpu, loss=rmse_conv,
-    validation_loss=true, validation_frequency=10, validation_size=2_000, verbosity=1, 
-    transform=true, epochs=1_000, use_logs=false
+    restrict_data, datapath, batchsize=32, passes_per_batch=1, dev=cpu, 
+    loss=rmse_conv,validation_loss=true, validation_frequency=10, 
+    validation_size=2_000, verbosity=1, transform=true, epochs=1_000
 )
     Flux.trainmode!(m) # In case we have dropout / layer normalization
     θ = Flux.params(m) # Extract parameters
     best_model = deepcopy(m) 
     best_loss = Inf
 
-    # files = readdir(datapath)
-    BSON.@load statsfile μs σs qminP qmaxP qRV qBV lnμs lnσs qlnBV qlnRV
-    function restrict_data(X, Y, use_logs=use_logs)
-        if use_logs
-            X = cat(X[:, :, 1:1, :], log.(X[:, :, 2:3, :]), dims=3)
-            μs = lnμs
-            σs = lnσs
-            qBV = qlnBV
-            qRV = qlnRV
-        end
-        # Indexes where prices exceed
-        csX = cumsum(X[:, :, 1, :], dims=2)
-        idxP = (sum(csX .< qminP, dims=[1,2]) + sum(csX .> qmaxP, dims=[1,2])) |> vec .== 0
-        X = X[:, :, :, idxP]
-        Y = Y[:, idxP]
-        # Indexes where RV exceeds
-        idxRV = sum(X[:, :, 2, :] .> qRV, dims=[1,2]) |> vec .==0
-        X = X[:, :, :, idxRV]
-        Y = Y[:, idxRV]
-        # Indexes where BV exceeds threshold
-        idxBV = sum(X[:, :, 3, :] .> qBV, dims=[1,2]) |> vec .== 0
-        (X[:, :, :, idxBV] .- μs) ./ σs, Y[:, idxBV]
-    end
-
+    files = shuffle(readdir(datapath))
+    epochs = length(files)
 
     # Create a validation set to compute and keep track of losses
     if validation_loss
@@ -123,6 +101,7 @@ function train_cnn_from_datapath!(
         Xv = tabular2conv(Xv)
         Xv, Yv = map(dev, restrict_data(Xv, Yv))
         losses = zeros(epochs)
+        @info "Validation set size: $(size(Yv, 2))"
     end
 
     # Compute pre-training loss
@@ -130,12 +109,13 @@ function train_cnn_from_datapath!(
     pre_train_loss = loss(Ŷ, Yv)
     @info "Pre training:" pre_train_loss
 
-    for epoch ∈ 1:epochs
+    
+    for (epoch, file) ∈ enumerate(files)
         # TODO: why is this needed?
         GC.gc(true)
         CUDA.reclaim()
         # Load matching file (TODO: CHANGE THIS!!)
-        BSON.@load joinpath(datapath, "$epoch.bson") X Y
+        BSON.@load joinpath(datapath, file) X Y
         X, Y = restrict_data(X, Y)
         # Pass to device
         X, Y = map(dev, [X, Y])

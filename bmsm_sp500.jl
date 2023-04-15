@@ -16,28 +16,44 @@ include("DGPs/JD.jl")
 include("NeuralNets/utils.jl")
 include("NeuralNets/tcn_utils.jl")
 
-include("MSM/BMSM.jl") 
+include("MSM/MSM.jl")
+include("MSM/BMSM.jl")
 
-
-# Whether or not to use the model that was trained on log-transformed data
-use_logs = true 
 
 # Outside of the main() function due to world age issues
-best_model = use_logs ? BSON.load("models/JD/best_model_ln_bs256_10k.bson")[:best_model] :
-    BSON.load("models/JD/best_model_bs256_10k.bson")[:best_model];
+tcn = BSON.load("models/JD/best_model_ln_bs256_10k.bson")[:best_model];
+
+# Load statistics for standardization
+BSON.@load "statistics_new.bson" lnμs lnσs
+
+@views function preprocess(x, y)
+    # Restrict based on max. absolute returns being at most 50
+    idx = (maximum(abs, x[1, :, 1, :], dims=1) |> vec) .≤ 50
+    idx2 = (mean(x[1, :, 2, :], dims=1) |> vec) .≤ 3 # Mean RV under 3
+    x = x[:, :, :, idx .& idx2]
+    y = y[:, idx .& idx2]
+    x[:, :, 2:3, :] = log1p.(x[:, :, 2:3, :]) # Log RV and BV
+    (x .- lnμs) ./ lnσs, y
+end
+
+@views function preprocess(x) # For X only, don't discard extreme values
+    x[:, :, 2:3, :] = log1p.(x[:, :, 2:3, :]) # Log RV and BV
+    (x .- lnμs) ./ lnσs
+end
 
 function main()
 
 transform_seed = 1204
 S = 200 # Simulations to estimate moments
-N = 5_000 # MCMC chain length
+N = 500 # MCMC chain length
 burnin = 100 # Burn-in steps
 covreps = 500 # Number of repetitions to estimate the proposal covariance
 verbosity = 50 # MCMC verbosity
-filename = "chain_230404.bson"
+filename = "chain_230415_logs.bson"
 
-# Tuning parameter (TODO: parameter under logs still unclear)
-δ = use_logs ? 1f-3 : 15f-2
+# # Tuning parameter (TODO: parameter under logs still unclear)
+# δ = use_logs ? 1f-3 : 15f-2
+δ = 5f-1
 
 
 @info "Loading data, preparing model..."
@@ -46,24 +62,9 @@ df = CSV.read("sp500.csv", DataFrame);
 X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
     x -> reshape(x, size(x)..., 1) |>
     x -> permutedims(x, (2, 3, 1)) |> 
-    tabular2conv
+    tabular2conv |> preprocess
 
 
-
-Flux.testmode!(best_model);
-
-# Load statistics for standardization
-BSON.@load "statistics.bson" μs σs lnμs lnσs
-
-# When using log-transform, we have to transform the data as we receive it
-@views function logstandardize(x)
-    x[:, :, 2:3, :] = log.(x[:, :, 2:3, :])
-    (x .- lnμs) ./ lnσs
-end
-# Simple standardization if we don't use the log-model
-standardize(x) = (x .- μs) ./ σs
-
-tcn(x) = use_logs ? logstandardize(x) |> best_model : standardize(x) |> best_model;
 
 @info "Loading DGP, making data transform..."
 # Define DGP and make transform
@@ -71,28 +72,33 @@ dgp = JD(1000)
 Random.seed!(transform_seed)
 dtθ = data_transform(dgp, 100_000);
 
+Flux.testmode!(tcn);
 # Compute data moments
 θ̂ₓ = tcn(X₀) |> m -> mean(StatsBase.reconstruct(dtθ, m), dims=2) |> vec
 
 @info "Computing covariance of the proposal..."
 # Covariance of the proposal
-_, Σp = simmomentscov(tcn, dgp, covreps, θ̂ₓ, dtθ=dtθ)
-Σp = cholesky(Σp).L
+_, Σp = simmomentscov(tcn, dgp, covreps, θ̂ₓ, dtθ=dtθ, preprocess=preprocess)
+ΣpL = cholesky(Σp).L
+Σ⁻¹ = inv(10_000Σp)
 
 @info "Running MCMC..."
-prop = θ⁺ -> proposal(θ⁺, δ, Σp)
-obj = θ⁺ -> -bmsmobjective(θ̂ₓ, θ⁺, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp)
+prop = θ⁺ -> rand(MvNormal(θ⁺, δ * Σp))
+# Continuously updated objective
+# obj = θ⁺ -> -bmsmobjective(θ̂ₓ, θ⁺, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
+# Two-step objective
+obj = θ⁺ -> -bmsmobjective(θ̂ₓ, θ⁺, Σ⁻¹, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
 chain = mcmc(θ̂ₓ, Lₙ=obj, proposal=prop, N=N, burnin=burnin, verbosity=verbosity)
 
 # Save chain
 BSON.@save filename chain
 
 
-# Make MCMC chain and display
-ch = Chains(chain[:, 1:end-1])
+# # Make MCMC chain and display
+# ch = Chains(chain[:, 1:end-1])
 
-# Save chain
-display(plot(ch))
+# # Display chain
+# display(plot(ch))
 end
 
 main()

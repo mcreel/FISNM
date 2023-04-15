@@ -1,6 +1,10 @@
-function simmoments(tcn, dgp::DGP, S::Int, θ::Vector{Float32}; dtθ)
+function simmoments(tcn, dgp::DGP, S::Int, θ::Vector{Float32}; 
+    dtθ, preprocess::Union{Function,Nothing}=nothing)
     # Computes moments according to the TCN for a given DGP, θ, and S
     X = tabular2conv(generate(θ, dgp, S)) # Generate data
+    if !isnothing(preprocess)
+        X = preprocess(X)
+    end
      # Compute average simulated moments
     return mean(StatsBase.reconstruct(dtθ, tcn(X)), dims=2) |> vec
 end
@@ -11,7 +15,7 @@ function msm_objective(
     tcn, S::Int, dtθ, seed::Union{Nothing, Int}=nothing
 )
     # Make sure the solution is in the support
-    insupport(dgp, θ⁺...) || return Inf
+    insupport(dgp, θ⁺) || return Inf
     isnothing(seed) || Random.seed!(seed)
     # Compute simulated moments
     θ̂ₛ = simmoments(tcn, dgp, S, θ⁺, dtθ=dtθ)
@@ -22,15 +26,23 @@ end
 
 function msm(
     dgp::DGP; 
-    S::Int, dtθ, model, M::Int=10, verbosity::Int=0, show_trace::Bool=false
+    S::Int, dtθ, model, M::Int=10, verbosity::Int=0, show_trace::Bool=false,
+    preprocess::Union{Function,Nothing}=nothing
 )
     k = nparams(dgp)
     θmat = zeros(Float32, 3k, M)
     @inbounds for i ∈ axes(θmat, 2)
-        # Generate true parameters randomly
-        X₀, θ₀ = generate(dgp, 1)
-        θ₀ = θ₀ |> vec
-        X₀ = X₀ |> tabular2conv
+        while true
+            # Generate true parameters randomly
+            X₀, θ₀ = generate(dgp, 1)
+            
+            X₀ = X₀ |> tabular2conv
+            if !isnothing(preprocess)
+                X₀, θ₀ = preprocess(X₀, θ₀)
+            end
+            θ₀ = θ₀ |> vec
+            length(θ₀) > 0 && break
+        end
         # Data moments
         θ̂ₓ = model(X₀) |> m -> mean(StatsBase.reconstruct(dtθ, m), dims=2) |> vec
         # MSM estimate
