@@ -4,6 +4,7 @@ end
 
 # ----- Model-specific utilities -----------------------------------------------
 insupport(::MA2, θ₁, θ₂) = (-2 < θ₁ < 2) && (-1 < θ₂ < 1) && (θ₂ - abs(θ₁) > -1)
+insupport(d::MA2, θ::AbstractVector) = insupport(d, θ...)
 
 function simulate_ma2(
     θ₁::Float32, θ₂::Float32, n::Int
