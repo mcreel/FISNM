@@ -1,13 +1,17 @@
 # Build TCN for a given DGP
-function build_tcn(d::DGP; dilation=2, kernel_size=8, channels=16, summary_size=10, dev=cpu)
+function build_tcn(d::DGP; 
+    dilation=2, kernel_size=8, channels=16, summary_size=10, dev=cpu,
+    dropout_rate=0., n_layers=0)
     # Compute TCN dimensions and necessary layers for full RFS
-    n_layers = ceil(Int, necessary_layers(dilation, kernel_size, d.N))
+    if n_layers == 0
+        n_layers = necessary_layers(dilation, kernel_size, d.N)
+    end
     dim_in, dim_out = nfeatures(d), nparams(d)
     dev(
         Chain(
             TCN(
                 vcat(dim_in, [channels for _ ∈ 1:n_layers], 1),
-                kernel_size=kernel_size, # TODO: BE CAREFUL! DILATION IS ACTUALLY NOT HANDLED!!!
+                kernel_size=kernel_size, dropout_rate=dropout_rate,
             ),
             Conv((1, summary_size), 1 => 1, stride=summary_size),
             Flux.flatten,
@@ -22,7 +26,7 @@ function train_cnn!(
     m, opt, dgp, dtY;
     epochs=1000, batchsize=32, passes_per_batch=10, dev=cpu, loss=rmse_conv,
     validation_loss=true, validation_frequency=10, validation_size=2_000, verbosity=1, 
-    transform=true
+    validation_seed=nothing, transform=true
 )
     Flux.trainmode!(m) # In case we have dropout / layer normalization
     θ = Flux.params(m) # Extract parameters
@@ -39,6 +43,7 @@ function train_cnn!(
 
     # Iterate over training epochs
     for epoch ∈ 1:epochs
+        isnothing(validation_seed) || Random.seed!(validation_seed)
         X, Y = generate(dgp, batchsize, dev=dev) # Generate a new batch
         transform && StatsBase.transform!(dtY, Y)
         # Transform features to format for CNN
@@ -84,7 +89,7 @@ function train_cnn_from_datapath!(
     m, opt, dgp, dtY;
     restrict_data, datapath, batchsize=32, passes_per_batch=1, dev=cpu, 
     loss=rmse_conv,validation_loss=true, validation_frequency=10, 
-    validation_size=2_000, verbosity=1, transform=true, epochs=1_000
+    validation_size=2_000, verbosity=1, transform=true, validation_seed=nothing
 )
     Flux.trainmode!(m) # In case we have dropout / layer normalization
     θ = Flux.params(m) # Extract parameters
@@ -92,10 +97,11 @@ function train_cnn_from_datapath!(
     best_loss = Inf
 
     files = shuffle(readdir(datapath))
-    epochs = length(files)
+    epochs = length(files) * passes_per_batch
 
     # Create a validation set to compute and keep track of losses
     if validation_loss
+        isnothing(validation_seed) || Random.seed!(validation_seed)
         Xv, Yv = generate(dgp, validation_size, dev=cpu)
         # Want to see validation RMSE on original scale => no rescaling
         Xv = tabular2conv(Xv)
@@ -106,24 +112,29 @@ function train_cnn_from_datapath!(
 
     # Compute pre-training loss
     Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
-    pre_train_loss = loss(Ŷ, Yv)
+    pre_train_loss = rmse_conv(Ŷ, Yv)
     @info "Pre training:" pre_train_loss
 
-    
-    for (epoch, file) ∈ enumerate(files)
-        # TODO: why is this needed?
-        GC.gc(true)
-        CUDA.reclaim()
-        # Load matching file (TODO: CHANGE THIS!!)
-        BSON.@load joinpath(datapath, file) X Y
-        X, Y = restrict_data(X, Y)
-        # Pass to device
-        X, Y = map(dev, [X, Y])
-        # Standardize Ys
-        transform && StatsBase.transform!(dtY, Y)
+    # Read in before the passes to ensure we don't have issues with new data
+    files = shuffle(readdir(datapath))
 
-        # ----- Training ---------------------------------------------
-        for passes_per_batch ∈ 1:passes_per_batch
+    for passes_per_batch ∈ 1:passes_per_batch
+        files = shuffle(files) # Reshuffle
+        for (epoch, file) ∈ enumerate(files)
+            epoch += (passes_per_batch - 1) * length(files)
+            # TODO: why is this needed?
+            GC.gc(true)
+            CUDA.reclaim()
+            # Load matching file (TODO: CHANGE THIS!!)
+            BSON.@load joinpath(datapath, file) X Y
+            X, Y = restrict_data(X, Y)
+            # Pass to device
+            X, Y = map(dev, [X, Y])
+            # Standardize Ys
+            transform && StatsBase.transform!(dtY, Y)
+
+            # ----- Training ---------------------------------------------
+            
             dl = Flux.DataLoader((X, Y), batchsize=min(batchsize, size(Y, 2)),
                 shuffle=true)
             # Compute loss and gradients
@@ -134,23 +145,24 @@ function train_cnn_from_datapath!(
                 # Take gradient descent step
                 Flux.update!(opt, θ, ∇)
             end
-        end
 
-        # Compute validation loss and print status if verbose
-        # Do this for the last 100 epochs, too, in case frequency is low
-        if validation_loss && (epoch % validation_frequency == 0)
-            Flux.testmode!(m)
-            Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
-            current_loss = loss(Ŷ, Yv)
-            if current_loss < best_loss
-                best_loss = current_loss
-                best_model = deepcopy(cpu(m))
+            # Compute validation loss and print status if verbose
+            # Do this for the last 100 epochs, too, in case frequency is low
+            if validation_loss && (epoch % validation_frequency == 0)
+                Flux.testmode!(m)
+                Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
+                current_loss = loss(Ŷ, Yv)
+                if current_loss < best_loss
+                    best_loss = current_loss
+                    best_model = deepcopy(cpu(m))
+                end
+                current_loss = rmse_conv(Ŷ, Yv) # Do this to ensure comparison even when training with Huber loss
+                losses[epoch] = current_loss
+                Flux.trainmode!(m)
+                epoch % verbosity == 0 && @info "$epoch / $epochs" best_loss current_loss
+            else
+                epoch % verbosity == 0 && @info "$epoch / $epochs"
             end
-            losses[epoch] = current_loss
-            Flux.trainmode!(m)
-            epoch % verbosity == 0 && @info "$epoch / $epochs" best_loss current_loss
-        else
-            epoch % verbosity == 0 && @info "$epoch / $epochs"
         end
     end
     # Return losses if tracked

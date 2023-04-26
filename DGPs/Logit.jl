@@ -9,7 +9,7 @@ end
 # each column is a vector of regressors, plus the 0/1 outcome in last row
 @views function simulate_logit(θ, n)
     k = size(θ,1)
-    data = Float32[rand(1,n); randn(2,n); zeros(1,n)]
+    data = Float32[ones(1,n); randn(2,n); zeros(1,n)]
     data[k+1,:] = rand(1,n) .< 1.0 ./(1. .+ exp.(-θ'*data[1:k,:]))
     data
 end    

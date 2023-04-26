@@ -14,7 +14,7 @@ isweekday(d::Int)::Bool = (d % 7) % 6 != 0
 
 function insupport(dgp::JD, θ)
     lb, ub = θbounds(dgp)
-    all(θ .>= lb) && all(θ .<=ub)
+    all(θ .>= lb) && all(θ .<= ub)
 end
 
 function diffusion(μ,κ,α,σ,ρ,u0,tspan)
