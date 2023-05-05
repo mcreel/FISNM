@@ -16,34 +16,6 @@
 """
 
 using MCMCChains, Distributions
-function mcmc(silent=false)
-    itworked = true
-    try
-        # sample is from exponential, prior is lognormal, proposal is random walk lognormal
-        y = rand(Exponential(3.0),30)
-        # set prior, likelihood and proposal
-        Prior = θ -> pdf.(Ref(LogNormal(1.0,1.0)), θ)
-        lnL = θ -> sum(logpdf.(Ref(Exponential(θ)), y))
-        tuning = 0.5
-        Proposal = θ -> rand(LogNormal(log(θ),tuning))
-        # get the chain, plot posterior, and descriptive stats
-        report = !silent
-        chain = mcmc(1.0, 1000, 100, Prior, lnL, Proposal, report) # start value, chain length, and burnin 
-        chain = Chains(chain[:,1], ["θ"])
-        p=plot(chain)
-        if !silent
-            println("mcmc(), called with no arguments, runs a simple example")
-            println("execute edit(mcmc,()) to see the code")
-            plot!(p, title="          true value = 3.0", show=true) # add a title
-            display(p)
-            display(chain)
-        end    
-    catch
-        itworked = false
-    end    
-    itworked
-end
-
 # method using threads and symmetric proposal
 @views function mcmc(θ, reps::Int64, burnin::Int64, Prior::Function, lnL::Function, Proposal::Function, report::Bool, nthreads::Int64)
     perthread = reps ÷ nthreads
