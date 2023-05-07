@@ -27,11 +27,11 @@ function main()
     dev = gpu
     transform_size = 100_000
     batchsize = 1_024
-    passes_per_batch = 2
+    passes_per_batch = 3
     validation_frequency = 50
-    validation_size = 10_000
+    validation_size = 15_000
     verbosity = 10
-    loss = Flux.Losses.huber_loss
+    loss = rmse_conv # Flux.Losses.huber_loss
     datapath = "data"
     validation_loss = true
     validation_seed = 72
@@ -44,13 +44,14 @@ function main()
     
 
     # Get mean and standard deviation from statistics file
-    BSON.@load "statistics_new.bson" μs σs lnμs lnσs
-    function restrict_data(x, y, max_ret=50, max_rv=3)
+    BSON.@load "statistics_new_20.bson" μs σs lnμs lnσs
+    function restrict_data(x, y, max_ret=30, max_rv=20, max_bv=max_rv)
         # Restrict based on max. absolute returns being at most max_ret
         idx = (maximum(abs, x[1, :, 1, :], dims=1) |> vec) .≤ max_ret
         idx2 = (mean(x[1, :, 2, :], dims=1) |> vec) .≤ max_rv # Mean RV under threshold
-        x = x[:, :, :, idx .& idx2]
-        y = y[:, idx .& idx2]
+        idx3 = (mean(x[1, :, 3, :], dims=1) |> vec) .≤ max_bv # Mean BV under threshold
+        x = x[:, :, :, idx .& idx2 .& idx3]
+        y = y[:, idx .& idx2 .& idx3]
         x[:, :, 2:3, :] = log1p.(x[:, :, 2:3, :]) # Log RV and BV
         # # Restrict λ₀ and τ to be non-negative
         y[6, :] .= max.(y[6, :], 0)
