@@ -42,10 +42,11 @@ function main()
 
     dgp = JD(N=1000)
     
+    specs = (name = "30-20", max_ret = 30, max_rv = 20, max_bv = 20)
 
     # Get mean and standard deviation from statistics file
-    BSON.@load "statistics_new_20.bson" μs σs lnμs lnσs
-    function restrict_data(x, y, max_ret=30, max_rv=20, max_bv=max_rv)
+    BSON.@load "statistics_$(specs.name).bson" μs σs
+    function restrict_data(x, y, max_ret=specs.max_ret, max_rv=specs.max_rv, max_bv=specs.max_bv)
         # Restrict based on max. absolute returns being at most max_ret
         idx = (maximum(abs, x[1, :, 1, :], dims=1) |> vec) .≤ max_ret
         idx2 = (mean(x[1, :, 2, :], dims=1) |> vec) .≤ max_rv # Mean RV under threshold
@@ -56,7 +57,7 @@ function main()
         # # Restrict λ₀ and τ to be non-negative
         y[6, :] .= max.(y[6, :], 0)
         y[8, :] .= max.(y[8, :], 0)
-        (x .- lnμs) ./ lnσs, y
+        (x .- μs) ./ σs, y
     end
 
     model = build_tcn(dgp, dilation=2, kernel_size=32, channels=32,
