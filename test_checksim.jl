@@ -80,7 +80,7 @@ idx = maximum(abs, d[1, :, :], dims=2) .≤ 50
 idx2 = mean(d[2, :, :], dims=2) .≤ 50 # Mean RV under threshold
 idx3 = mean(d[3, :, :], dims=2) .≤ 50 # Mean BV under threshold
 
-idx = idx .& idx2 .& idx3
+idx = idx .& idx2 .& idx3 |> vec
 @info "Discarding $(reps - sum(idx)) observations"
 d = d[:, idx, :]
 
