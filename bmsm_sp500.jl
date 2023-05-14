@@ -21,11 +21,10 @@ include("MSM/BMSM.jl")
 
 
 # Outside of the main() function due to world age issues
-#tcn = BSON.load("models/JD/best_model_ln_bs1024_rv30_capNone.bson")[:best_model];
-tcn = BSON.load("models/JD/best_model_ln_bs1024_rv30_cap0.bson")[:best_model];
+tcn = BSON.load("models/JD/best_model_ln_bs1024_rv20_new.bson")[:best_model];
 
 # Load statistics for standardization
-BSON.@load "statistics_new_30.bson" lnμs lnσs
+BSON.@load "statistics_new_20.bson" lnμs lnσs
 
 @views function preprocess(x) # For X only, don't discard extreme values
     x[:, :, 2:3, :] = log1p.(x[:, :, 2:3, :]) # Log RV and BV
@@ -58,7 +57,10 @@ X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
 # Define DGP and make transform
 dgp = JD(1000)
 Random.seed!(transform_seed)
-dtθ = data_transform(dgp, 100_000);
+pd = priordraw(dgp, 100_000)
+pd[6, :] .= max.(pd[6, :], 0)
+pd[8, :] .= max.(pd[8, :], 0)
+dtθ = fit(ZScoreTransform, pd)
 
 Flux.testmode!(tcn);
 Random.seed!(rand(1:Int64(1e10)))
