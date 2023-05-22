@@ -1,4 +1,4 @@
-using StatsPlots
+using Distributions, LinearAlgebra
 include("mcmc.jl")
 
 function simmomentscov(tcn, dgp::DGP, S::Int, θ::Vector{Float64}; 
@@ -16,31 +16,21 @@ end
     current + δ * Σ * randn(size(current))
 end
    
-# Continously updated MSM objective
+# MSM quasi-loglikelihood, written to MAXIMIZE
 @inbounds function bmsmobjective(
     θ̂ₓ::Vector{Float64}, θ⁺::Vector{Float64};
     tcn, S::Int, dtθ, dgp, preprocess::Union{Function,Nothing}=nothing
 )        
     # Make sure the solution is in the support
-    insupport(dgp, θ⁺) || return Inf
+    insupport(dgp, θ⁺) || return -Inf
     # Compute simulated moments
     θ̂ₛ, Σₛ = simmomentscov(tcn, dgp, S, θ⁺, dtθ=dtθ, preprocess=preprocess)
     # to work with asymptotic distribution, need to scale by √n.
-    W = inv(1000.0*Σₛ)
+    Σₛ *= (1000.0*(1+1/S))
+    isposdef(Σₛ) || return -Inf
     err = sqrt(1000.0)*(θ̂ₓ - θ̂ₛ) 
-    return dot(err, W, err)
-end
-
-# Two-step MSM objective: CUE is preferred, this is for fast experiments
-@inbounds function bmsmobjective(
-    θ̂ₓ::Vector{Float64}, θ⁺::Vector{Float64}, Σ⁻¹::AbstractMatrix{Float64};
-    tcn, S::Int, dtθ, dgp, preprocess::Union{Function,Nothing}=nothing
-)        
-    # Make sure the solution is in the support
-    insupport(dgp, θ⁺) || return Inf
-    # Compute simulated moments
-    θ̂ₛ = simmoments(tcn, dgp, S, θ⁺, dtθ=dtθ, preprocess=preprocess)
-    err = sqrt(1000.0)*(θ̂ₓ - θ̂ₛ)
-    dot(err, Σ⁻¹, err) # Σ⁻¹ should already be scaled
+    W = inv(Σₛ)
+    -0.5*dot(err, W, err)
+    #logpdf(MvNormal(zeros(size(err,1)), Σₛ), err)
 end
 
