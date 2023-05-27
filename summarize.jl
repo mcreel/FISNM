@@ -6,9 +6,8 @@ using Statistics, MCMCChains, StatsPlots
 function main()
 
 #files = ("chain1_rv30_cap0.bson", "chain2_rv30_cap0.bson", "chain3_rv30_cap0.bson","chain4_rv30_cap0.bson")
-files = ("chain4_rv30_cap0.bson")
+files = ("30-20-06-chain1.bson","30-20-06-chain2.bson")
 
-#files = ("chain1_rv30_capNone.bson", "chain2_rv30_capNone.bson", "chain3_rv30_capNone.bson")
 ch = nothing
 Σp = 1.
 
@@ -18,10 +17,10 @@ for f in files
     println("rows: ", size(ch,1))
 end
 
-@info "acceptance rate: " mean(ch[:,end])
-ch = ch[:,1:end-1]
+@info "acceptance rate: " mean(ch[:,end-1])
+#ch = ch[:,1:end-2]
 
-names = ["μ","κ","α","σ","ρ","λ₀","λ₁","τ"]   
+names = ["μ","κ","α","σ","ρ","λ₀","λ₁","τ","ac","lnL"]   
 ch = Chains(ch, names)
 
 display(ch)
