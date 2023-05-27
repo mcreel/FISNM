@@ -1,3 +1,21 @@
+
+# script to do Bayesian MSM, using two step MSM criterion
+#
+# two step is much faster than CUE, as the number of simulations can 
+# be much less. CUE, to be reliable, need S large, which is very slow
+#
+# to run this, do main(n, outfile, infile) where
+# n is the chain length
+# outfile is the filename (BSON) to store results
+# infile is the name of the outfile of a previous run, or nothing
+#
+# if infile is nothing, SA is used to get start values
+#
+# n should be long enough so that the posterior mean is reasonably reliable
+#
+# for experiments, you can use the same name for input and output, it will overwrite
+
+
 using Pkg
 Pkg.activate(".")
 using BSON
@@ -94,14 +112,13 @@ else
     # use 2 step objective with initial covariance using tcn estimate. SA is used to get good start values.
     #saobj = θ -> -bmsmobjective(θtcn, θ, Weight, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
     #θsa, junk, junk, junk = samin(saobj, θtcn, lb, ub; rt=0.5, maxevals=1000, verbosity=3, nt=1, ns=20, coverage_ok=1)
+    # start = θsa
     start = [-0.008, 0.078, -0.81, 0.77, -0.89, 0.057, 2.37, 0.045] # from the SA run
  end
 
 # define functions for optimization and MCMC
 prop = θ -> rand(MvNormal(θ, δ * Σp))
 Random.seed!(rand(1:Int64(1e10)))
-
-
 @info "Running MCMC..."
 obj = θ -> bmsmobjective(θtcn, θ, Weight, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
 chain = mcmc(start, Lₙ=obj, proposal=prop, N=N, burnin=burnin, verbosity=verbosity)
