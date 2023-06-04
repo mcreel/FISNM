@@ -30,4 +30,7 @@ data/
 data_old*
 data_clean/
 data_full/
+data_tmp/
+data_new/
+data_lambda0/
 old_stuff/
