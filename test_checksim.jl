@@ -16,11 +16,11 @@ include("DGPs/JD.jl")
 include("NeuralNets/utils.jl")
 include("NeuralNets/tcn_utils.jl")
 
-include("MSM/MSM.jl")
-include("MSM/BMSM.jl")
+# include("MSM/MSM.jl")
+# include("MSM/BMSM.jl")
 
-specs = (name = "30-20", max_ret = 30, max_rv = 20, max_bv = 20)
-specs = (name = "100-50", max_ret = 100, max_rv = 50, max_bv = 50)
+specs = (name = "30-20-drop", max_ret = 30, max_rv = 20, max_bv = 20)
+specs = (name = "100-50-drop", max_ret = 100, max_rv = 50, max_bv = 50)
 # specs = (name = "30-20-06_0drop_7layers", max_ret = 30, max_rv = 20, max_bv = 20)
 # Outside of the main() function due to world age issues
 #tcn = BSON.load("models/JD/best_model_ln_bs1024_rv30_capNone.bson")[:best_model];
