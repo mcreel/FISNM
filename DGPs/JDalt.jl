@@ -1,18 +1,20 @@
-@Base.kwdef struct JD <: DGP
+# alternative JD model, with Gaussian jumps of constant variance
+#
+@Base.kwdef struct JDalt <: DGP
     N::Int
 end
 
 # ----- Model-specific utilities -----------------------------------------------
 isweekday(d::Int)::Bool = (d % 7) % 6 != 0
 
-# [μ; κ; α; σ; ρ; λ₀; λ₁; τ]
-θbounds(::JD) = (
-    #         μ,    κ,    α,   σ,    ρ,    λ₀, λ₁,    τ   
-    Float32[-.05, .01,  -6, 0.1, -.99,  -.02,  2, -.02], 
-    Float32[ .05, .30,   0, 4.0, -.50,   .10,  6,  .20]
+# [μ; κ; α; σ; ρ; λ₀; λ₁; γ₀; γ₁;τ]
+θbounds(::JDalt) = (
+    #         μ,    κ,   α, σ,    ρ,     λ₀,   λ₁,  τ   
+    Float32[-.05, .01,  -6, 0.1, -.99,  -0.02, 1., -.02], 
+    Float32[ .05, .30,   0, 4.0, -.50,   0.5,  4,    .20]
 )
 
-function insupport(dgp::JD, θ)
+function insupport(dgp::JDalt, θ)
     lb, ub = θbounds(dgp)
     all(θ .>= lb) && all(θ .<= ub)
 end
@@ -43,17 +45,18 @@ end
 
     # Solve the diffusion
     μ, κ, α, σ, ρ, λ₀, λ₁, τ = θ
-    τ = max(0, τ) # The prior allows for negative measurement error, to allow an accumulation at zero
     u₀ = [μ; α]
     prob = diffusion(μ, κ, α, σ, ρ, u₀, (0., days))
-    λ₀⁺ = max(0, λ₀) # The prior allows for negative rate, to allow an accumulation at zero
 
-    # # Jump in log price
-    rate(u, p, t) = λ₀⁺
+    # params that have 0 as min (the prior allows neg to create atom at zero)
+    λ₀ = max(0, λ₀)
+    τ  = max(0, τ)
 
-    # Jump is random sign time λ₁ times current std. dev.
+    # # Jump rates
+    rate(u, p, t) = λ₀
+
     function affect!(integrator)
-        integrator.u[1] = integrator.u[1] + rand([-1., 1.]) * λ₁ * exp(integrator.u[2] / 2)
+        integrator.u[1] = integrator.u[1] + λ₁ * randn()
         nothing
     end
 
@@ -93,9 +96,9 @@ end
 
 
 # ----- DGP necessary functions ------------------------------------------------
-priordraw(d::JD, S::Int) = uniformpriordraw(d, S) # [μ; κ; α; σ; ρ; λ₀; λ₁; τ]
+priordraw(d::JDalt, S::Int) = uniformpriordraw(d, S) # [μ; κ; α; σ; ρ; λ₀; λ₁; τ]
 
-@views function generate(d::JD, S::Int)
+@views function generate(d::JDalt, S::Int)
     y = priordraw(d, S)
     x = zeros(Float32, d.N, 3, S)
     Threads.@threads for s ∈ axes(x, 3)
@@ -104,7 +107,7 @@ priordraw(d::JD, S::Int) = uniformpriordraw(d, S) # [μ; κ; α; σ; ρ; λ₀; 
     permutedims(x, (2, 3, 1)), y
 end
 
-@views function generate(θ::Vector{Float32}, d::JD, S::Int)
+@views function generate(θ::Vector{Float32}, d::JDalt, S::Int)
     # insupport(d, θ...) || throw(ArgumentError("θ is not in support"))
     x = zeros(Float32, d.N, 3, S)
     Threads.@threads for s ∈ axes(x, 3)
@@ -114,6 +117,6 @@ end
 end
 
 
-nfeatures(::JD) = 3
-nparams(::JD) = 8
+nfeatures(::JDalt) = 3
+nparams(::JDalt) = 8
 

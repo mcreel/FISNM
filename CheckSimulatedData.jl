@@ -21,15 +21,15 @@ include("MSM/BMSM.jl")
 
 
 # Outside of the main() function due to world age issues
-tcn = BSON.load("models/JD/best_model_ln_bs1024_rv20_new.bson")[:best_model];
+tcn = BSON.load("models/JD/best_model_30-20.bson")[:best_model];
 
 
 # Load statistics for standardization
-BSON.@load "statistics_new_20.bson" lnμs lnσs
+BSON.@load "statistics_30-20.bson" μs σs
 
 @views function preprocess(x) # For X only, don't discard extreme values
     x[:, :, 2:3, :] = log1p.(x[:, :, 2:3, :]) # Log RV and BV
-     (x .- lnμs) ./ lnσs
+     (x .- μs) ./ σs
 end
 
 

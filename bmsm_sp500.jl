@@ -24,7 +24,7 @@ using DataFrames
 using DifferentialEquations
 using Flux
 using LinearAlgebra
-using Optim
+using Distributions
 using Random
 using StatsBase
 using MCMCChains
@@ -32,19 +32,19 @@ using StatsPlots
 
 include("DGPs/DGPs.jl")
 include("DGPs/JD.jl")
+include("DGPs/JDalt.jl")
 
 include("NeuralNets/utils.jl")
 include("NeuralNets/tcn_utils.jl")
 
-include("MSM/MSM.jl")
-include("MSM/BMSM.jl")
+include("BMSM.jl")
 include("samin.jl")
 
 # Outside of the main() function due to world age issues
-tcn = BSON.load("models/JD/best_model_ln_bs1024_30-20-06.bson")[:best_model];
+tcn = BSON.load("models/JD/best_model_100-50.bson")[:best_model];
 
 # Load statistics for standardization
-BSON.@load "statistics_30-20-06.bson" μs σs
+BSON.@load "statistics_100-50.bson" μs σs
 
 @views function preprocess(x) # For X only, don't discard extreme values
     x[:, :, 2:3, :] = log1p.(x[:, :, 2:3, :]) # Log RV and BV
@@ -54,15 +54,14 @@ end
 # using infile=nothing to start
 function main(N,  outfile, infile)
 
-transform_seed = 1204
-S = 10 # Simulations to estimate moments
+S = 10
 burnin = 100 # Burn-in steps
 covreps = 500 # Number of repetitions to estimate the proposal covariance
 verbosity = 10 # MCMC verbosity
 
 @info "Loading data, preparing model..."
 # Read SP500 data and transform it to TCN-friendly format
-df = CSV.read("sp500.csv", DataFrame);
+df = CSV.read("spy.csv", DataFrame);
 display(describe(df))
 X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
     x -> reshape(x, size(x)..., 1) |>
@@ -70,18 +69,24 @@ X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
     tabular2conv |> preprocess
 
 @info "Loading DGP, making data transform..."
-# Define DGP and make transform
+# Define DGP of auxilary model and make transform
 dgp = JD(1000)
+transform_seed = 1024
 Random.seed!(transform_seed)
 pd = priordraw(dgp, 100_000)
 pd[6, :] .= max.(pd[6, :], 0)
 pd[8, :] .= max.(pd[8, :], 0)
 dtθ = fit(ZScoreTransform, pd)
 
+# define DGP of the actual model
+#dgp = JDalt(1000)
 # get the TCN fitted parameters for the SP500 data
 Flux.testmode!(tcn);
 # Compute data moments
 θtcn = Float64.((tcn(X₀) |> m -> mean(StatsBase.reconstruct(dtθ, m), dims=2) |> vec))
+lb, ub = θbounds(dgp)
+θtcn = min.(θtcn,ub)
+θtcn = max.(θtcn,lb)
 display(θtcn)
 
 if infile !== nothing
@@ -102,7 +107,7 @@ if infile !== nothing
     @info "current δ: " δ
 else  
     @info "Computing covariance of the proposal..."
-    _, Σp = simmomentscov(tcn, dgp, covreps, θtcn, dtθ=dtθ, preprocess=preprocess)
+    _, Σp = simmomentscov(tcn, dgp, 500, θtcn, dtθ=dtθ, preprocess=preprocess)
     Weight = inv(1000.0*(1+1/S)*Σp)
     δ = 1e0
     @info "current δ: " δ
@@ -110,16 +115,26 @@ else
     lb = Float64.(lb)
     ub = Float64.(ub)
     # use 2 step objective with initial covariance using tcn estimate. SA is used to get good start values.
-    #saobj = θ -> -bmsmobjective(θtcn, θ, Weight, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
-    #θsa, junk, junk, junk = samin(saobj, θtcn, lb, ub; rt=0.5, maxevals=1000, verbosity=3, nt=1, ns=20, coverage_ok=1)
-    # start = θsa
-    start = [-0.008, 0.078, -0.81, 0.77, -0.89, 0.057, 2.37, 0.045] # from the SA run
- end
+#    saobj = θ -> -bmsmobjective(θtcn, θ, Weight, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
+#    θsa, junk, junk, junk = samin(saobj, θtcn, lb, ub; rt=0.5, maxevals=100, verbosity=3, nt=1, ns=20, coverage_ok=1)
+#    start = θsa
+    start = Float64.(θtcn)
+end
 
 # define functions for optimization and MCMC
-prop = θ -> rand(MvNormal(θ, δ * Σp))
-Random.seed!(rand(1:Int64(1e10)))
+
+# MVN random walk, or occasional draw from prior
+@inbounds function proposal(current, δ, Σ)
+    p = rand(MvNormal(current, δ*Σ))
+    p[6] = max(p[6],0)
+    p[8] = max(p[8],0)
+    p
+end
+prop = θ -> proposal(θ, δ, Σp)
+
+
 @info "Running MCMC..."
+Random.seed!(rand(1:Int64(1e10)))
 obj = θ -> bmsmobjective(θtcn, θ, Weight, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
 chain = mcmc(start, Lₙ=obj, proposal=prop, N=N, burnin=burnin, verbosity=verbosity)
 @info "acceptance rate: " mean(chain[:,9])
