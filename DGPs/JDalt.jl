@@ -10,7 +10,7 @@ isweekday(d::Int)::Bool = (d % 7) % 6 != 0
 # [μ; κ; α; σ; ρ; λ₀; λ₁; γ₀; γ₁;τ]
 θbounds(::JDalt) = (
     #         μ,    κ,   α, σ,    ρ,     λ₀,   λ₁,  τ   
-    Float32[-.05, .01,  -6, 0.1, -.99,  -0.02, 1., -.02], 
+    Float32[-.05, .01,  -6, 0.1, -.99,  -0.02, 0.0, -.02], 
     Float32[ .05, .30,   0, 4.0, -.50,   0.5,  4,    .20]
 )
 
@@ -45,7 +45,7 @@ end
 
     # Solve the diffusion
     μ, κ, α, σ, ρ, λ₀, λ₁, τ = θ
-    u₀ = [μ; α]
+    u₀ = [μ ; α]
     prob = diffusion(μ, κ, α, σ, ρ, u₀, (0., days))
 
     # params that have 0 as min (the prior allows neg to create atom at zero)

@@ -32,7 +32,6 @@ using StatsPlots
 
 include("DGPs/DGPs.jl")
 include("DGPs/JD.jl")
-include("DGPs/JDalt.jl")
 
 include("NeuralNets/utils.jl")
 include("NeuralNets/tcn_utils.jl")
@@ -41,10 +40,10 @@ include("BMSM.jl")
 include("samin.jl")
 
 # Outside of the main() function due to world age issues
-tcn = BSON.load("models/JD/best_model_100-50.bson")[:best_model];
+tcn = BSON.load("models/JD/best_model_30-20.bson")[:best_model];
 
 # Load statistics for standardization
-BSON.@load "statistics_100-50.bson" μs σs
+BSON.@load "statistics_30-20.bson" μs σs
 
 @views function preprocess(x) # For X only, don't discard extreme values
     x[:, :, 2:3, :] = log1p.(x[:, :, 2:3, :]) # Log RV and BV
@@ -54,7 +53,7 @@ end
 # using infile=nothing to start
 function main(N,  outfile, infile)
 
-S = 10
+S = 50
 burnin = 100 # Burn-in steps
 covreps = 500 # Number of repetitions to estimate the proposal covariance
 verbosity = 10 # MCMC verbosity
@@ -78,8 +77,6 @@ pd[6, :] .= max.(pd[6, :], 0)
 pd[8, :] .= max.(pd[8, :], 0)
 dtθ = fit(ZScoreTransform, pd)
 
-# define DGP of the actual model
-#dgp = JDalt(1000)
 # get the TCN fitted parameters for the SP500 data
 Flux.testmode!(tcn);
 # Compute data moments
@@ -135,7 +132,10 @@ prop = θ -> proposal(θ, δ, Σp)
 
 @info "Running MCMC..."
 Random.seed!(rand(1:Int64(1e10)))
-obj = θ -> bmsmobjective(θtcn, θ, Weight, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
+# @info "Using two-step objective"
+#obj = θ -> bmsmobjective(θtcn, θ, Weight, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
+@info "Using CUE objective"
+obj = θ -> bmsmobjective(θtcn, θ, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
 chain = mcmc(start, Lₙ=obj, proposal=prop, N=N, burnin=burnin, verbosity=verbosity)
 @info "acceptance rate: " mean(chain[:,9])
 # Save chain
