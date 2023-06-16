@@ -60,7 +60,7 @@ verbosity = 10 # MCMC verbosity
 
 @info "Loading data, preparing model..."
 # Read SP500 data and transform it to TCN-friendly format
-df = CSV.read("spy.csv", DataFrame);
+df = CSV.read("spy16-19.csv", DataFrame);
 display(describe(df))
 X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
     x -> reshape(x, size(x)..., 1) |>
