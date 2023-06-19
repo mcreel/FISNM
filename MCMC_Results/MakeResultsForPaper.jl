@@ -22,7 +22,7 @@ println("30-20-CUE loaded, acceptance rate: ", mean(chain1[:,end-1]), " length: 
 
 ## READ IN 30-20-16-19 CUE
 @info "reading chains for 30-20-16-19-CUE"
-files = ("30-20-16-19-CUE-chain1.bson",)
+files = ("30-20-16-19-CUE-chain1.bson", "30-20-16-19-CUE-chain2.bson")
 chain2 = nothing
 for f in files
     @load f chain Σp
