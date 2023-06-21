@@ -51,8 +51,8 @@ println(@green "additional summary for 14-17 data")
 println(@green "additional summary for 16-19 data")
 @show describe(spy2)
 
+#=
 ## make plots
-bandwidth = 0.01
 for i = 1:8
     density(spy1[:,i],fill=true, alpha=0.5, label="2014-2017")
     p = density!(spy2[:,i], fill=true, alpha=0.5, title=dfnames[i], label="2016-2019")
@@ -71,11 +71,10 @@ for i = 1:7
         # uncomment to see interactively
         display(p)
         sleep(5)
-        
     end
 end    
 
 ##
-
+=#
 end
 main()
