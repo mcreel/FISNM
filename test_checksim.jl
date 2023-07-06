@@ -19,17 +19,19 @@ include("NeuralNets/tcn_utils.jl")
 # include("MSM/MSM.jl")
 # include("MSM/BMSM.jl")
 
-specs = (name = "30-20-drop", max_ret = 30, max_rv = 20, max_bv = 20)
-specs = (name = "100-50-drop", max_ret = 100, max_rv = 50, max_bv = 50)
+specs = (name = "30-20", max_ret = 30, max_rv = 20, max_bv = 20)
+# specs = (name = "30-20-drop_01", max_ret = 30, max_rv = 20, max_bv = 20)
+# specs = (name = "100-50-drop", max_ret = 100, max_rv = 50, max_bv = 50)
 # specs = (name = "30-20-06_0drop_7layers", max_ret = 30, max_rv = 20, max_bv = 20)
 # Outside of the main() function due to world age issues
 #tcn = BSON.load("models/JD/best_model_ln_bs1024_rv30_capNone.bson")[:best_model];
-tcn = BSON.load("models/JD/best_model_$(specs.name).bson")[:best_model];
+tcn = BSON.load("models/JD/best_model_sobol_$(specs.name).bson")[:best_model];
 # tcn = BSON.load("models/JD/best_model_ln_bs1024_30-20-06_0drop_7layers.bson")[:best_model];
 Flux.testmode!(tcn);
 
 
-BSON.@load "statistics_$(specs.name).bson" μs σs
+BSON.@load "statistics/statistics_$(specs.name).bson" μs σs
+# BSON.@load "statistics_30-20.bson" μs σs
 
 @views function preprocess(x) # For X only, don't discard extreme values
     x[:, :, 2:3, :] = log1p.(x[:, :, 2:3, :]) # Log RV and BV
@@ -52,7 +54,7 @@ transform_size = 100_000
 
 @info "Loading data, preparing model..."
 # Read SP500 data and transform it to TCN-friendly format
-df = CSV.read("sp500.csv", DataFrame);
+df = CSV.read("spy.csv", DataFrame);
 display(describe(df))
 X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
     x -> reshape(x, size(x)..., 1) |>
@@ -68,11 +70,15 @@ pd[6, :] .= max.(pd[6, :], 0)
 pd[8, :] .= max.(pd[8, :], 0)
 dtθ = fit(ZScoreTransform, pd)
 # dtθ = data_transform(dgp, transform_size)
+# TODO =============
+θb = hcat(θbounds(dgp)...)
+θb[6, 1] = 0 # λ₀
+θb[8, 1] = 0 # τ
 
 Flux.testmode!(tcn);
 Random.seed!(rand(1:Int64(1e10)))
 # Compute data moments
-θ̂ₓ = Float64.((tcn(X₀) |> m -> mean(StatsBase.reconstruct(dtθ, m), dims=2) |> vec))
+θ̂ₓ = Float64.((tcn(X₀) |> m -> StatsBase.reconstruct(dtθ, m) |> vec))
 display(θ̂ₓ)
 
 # checking that model generates data similar to actual SP500
