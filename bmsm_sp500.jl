@@ -40,7 +40,7 @@ include("BMSM.jl")
 include("samin.jl")
 
 # Outside of the main() function due to world age issues
-tcn = BSON.load("models/JD/best_model_30-20.bson")[:best_model];
+tcn = BSON.load("sobel-30-20.bson")[:best_model];
 
 # Load statistics for standardization
 BSON.@load "statistics_30-20.bson" μs σs
