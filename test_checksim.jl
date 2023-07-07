@@ -15,18 +15,29 @@ include("DGPs/JD.jl")
 
 include("NeuralNets/utils.jl")
 include("NeuralNets/tcn_utils.jl")
+include("NeuralNets/TCN.jl")
 
 # include("MSM/MSM.jl")
 # include("MSM/BMSM.jl")
 
 specs = (name = "30-20", max_ret = 30, max_rv = 20, max_bv = 20)
+specs = (name = "100-50", max_ret = 100, max_rv = 50, max_bv = 50)
 # specs = (name = "30-20-drop_01", max_ret = 30, max_rv = 20, max_bv = 20)
 # specs = (name = "100-50-drop", max_ret = 100, max_rv = 50, max_bv = 50)
 # specs = (name = "30-20-06_0drop_7layers", max_ret = 30, max_rv = 20, max_bv = 20)
 # Outside of the main() function due to world age issues
 #tcn = BSON.load("models/JD/best_model_ln_bs1024_rv30_capNone.bson")[:best_model];
-tcn = BSON.load("models/JD/best_model_sobol_$(specs.name).bson")[:best_model];
+# tcn = BSON.load("models/JD/best_model_sobol_$(specs.name).bson")[:best_model];
 # tcn = BSON.load("models/JD/best_model_ln_bs1024_30-20-06_0drop_7layers.bson")[:best_model];
+# Flux.testmode!(tcn);
+
+dgp = JD(1000);
+
+tcn = build_tcn(dgp, dilation=2, kernel_size=32, channels=32,
+    summary_size=10, dev=cpu, n_layers=7);
+
+BSON.@load "tcn_state_$(specs.name).bson" tcn_state;
+Flux.loadmodel!(tcn, tcn_state);
 Flux.testmode!(tcn);
 
 
@@ -54,7 +65,7 @@ transform_size = 100_000
 
 @info "Loading data, preparing model..."
 # Read SP500 data and transform it to TCN-friendly format
-df = CSV.read("spy.csv", DataFrame);
+df = CSV.read("spy16-19.csv", DataFrame);
 display(describe(df))
 X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
     x -> reshape(x, size(x)..., 1) |>

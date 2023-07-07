@@ -1,7 +1,7 @@
 # Build TCN for a given DGP
 function build_tcn(d::DGP; 
-    dilation=2, kernel_size=8, channels=16, summary_size=10, dev=cpu,
-    dropout_rate=0., n_layers=0)
+    dilation=2, kernel_size=8, channels=16, summary_size=10, dev=cpu, n_layers=0
+)
     # Compute TCN dimensions and necessary layers for full RFS
     if n_layers == 0
         n_layers = necessary_layers(dilation, kernel_size, d.N)
@@ -11,7 +11,7 @@ function build_tcn(d::DGP;
         Chain(
             TCN(
                 vcat(dim_in, [channels for _ ∈ 1:n_layers], 1),
-                kernel_size=kernel_size, dropout_rate=dropout_rate,
+                kernel_size=kernel_size,
             ),
             Conv((1, summary_size), 1 => 1, stride=summary_size),
             Flux.flatten,
@@ -105,23 +105,29 @@ function train_cnn_from_datapath!(
         Xv, Yv = generate(dgp, validation_size, dev=cpu)
         # Want to see validation RMSE on original scale => no rescaling
         Xv = tabular2conv(Xv)
-        Xv, Yv = map(dev, restrict_data(Xv, Yv))
+        # if datapath == "data_clean"
+        #     # Cap data (and apply log to RV/BV)
+        #     Xv[:, :, 1, :] .= clamp.(Xv[:, :, 1, :], -100, 100)
+        #     Xv[:, :, 2:3, :] .= log.(clamp.(Xv[:, :, 2:3, :], 1f-4, 1f4))
+        # end
+        Xv, Yv = map(dev, restrict_data(Xv, Yv)) # TODO: change this
+        transform && StatsBase.transform!(dtY, Yv)
         losses = zeros(epochs)
         @info "Validation set size: $(size(Yv, 2))"
     end
 
     # Compute pre-training loss
-    Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
+    Ŷ = m(Xv)
     pre_train_loss = rmse_conv(Ŷ, Yv)
     @info "Pre training:" pre_train_loss
 
     # Read in before the passes to ensure we don't have issues with new data
     files = shuffle(readdir(datapath))
 
-    for passes_per_batch ∈ 1:passes_per_batch
+    for pass ∈ 1:passes_per_batch
         files = shuffle(files) # Reshuffle
         for (epoch, file) ∈ enumerate(files)
-            epoch += (passes_per_batch - 1) * length(files)
+            epoch += (pass - 1) * length(files)
             # TODO: why is this needed?
             GC.gc(true)
             CUDA.reclaim()
@@ -129,7 +135,7 @@ function train_cnn_from_datapath!(
             BSON.@load joinpath(datapath, file) X Y
             X, Y = restrict_data(X, Y)
             # Pass to device
-            X, Y = map(dev, [X, Y])
+            X, Y = map(dev, [X, Y]) # TODO: change this
             # Standardize Ys
             transform && StatsBase.transform!(dtY, Y)
 
@@ -148,9 +154,9 @@ function train_cnn_from_datapath!(
 
             # Compute validation loss and print status if verbose
             # Do this for the last 100 epochs, too, in case frequency is low
-            if validation_loss && (epoch % validation_frequency == 0)
+            if validation_loss && ((epoch % validation_frequency == 0) || (pass == passes_per_batch && epoch > epochs - 1000))
                 Flux.testmode!(m)
-                Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
+                Ŷ = m(Xv)
                 current_loss = loss(Ŷ, Yv)
                 if current_loss < best_loss
                     best_loss = current_loss

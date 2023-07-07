@@ -9,18 +9,16 @@
 function TemporalBlock(
     chan_in::Int, chan_out::Int; 
     dilation::Int, kernel_size::Int,
-    residual::Bool = true, pad = SamePad(), dropout_rate::AbstractFloat = 0.
+    residual::Bool = true, pad = SamePad(),
 )
     # Causal convolutions
     causal_conv = Chain(
         Conv((1, kernel_size), chan_in => chan_out, dilation = dilation, 
             pad = pad),
         BatchNorm(chan_out, leakyrelu),
-        Dropout(dropout_rate),
         Conv((1, kernel_size), chan_out => chan_out, dilation = dilation, 
             pad = pad),
         BatchNorm(chan_out, leakyrelu),
-        Dropout(dropout_rate),
     )
     residual || return causal_conv
     # Skip connection (residual net)
@@ -34,12 +32,11 @@ end
 function TCN(
     channels::AbstractVector{Int}; 
     kernel_size::Int, dilation_factor::Int = 2, residual::Bool = true, 
-    pad = SamePad(), dropout_rate::AbstractFloat = 0.,
+    pad = SamePad(),
 )
     Chain([
         TemporalBlock(chan_in, chan_out, dilation=dilation_factor ^ (i - 1), 
             kernel_size=kernel_size, residual=residual, pad=pad,
-            dropout_rate=dropout_rate
         ) 
         for (i, (chan_in, chan_out)) ∈ enumerate(zip(channels[1:end-1], channels[2:end]))]...)
 end
