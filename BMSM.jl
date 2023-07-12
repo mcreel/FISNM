@@ -20,9 +20,9 @@ end
     insupport(dgp, θ) || return -Inf
     # Compute simulated moments
     θbar, Σ = simmomentscov(tcn, dgp, S, θ, dtθ=dtθ, preprocess=preprocess)
-    Σ *= 1000.0*(1+1/S) # 1 for θhat, 1/S for θbar
+    Σ *= dgp.N *(1+1/S) # 1 for θhat, 1/S for θbar
     isposdef(Σ) || return -Inf
-    err = sqrt(1000.0)*(θhat-θbar) 
+    err = sqrt(dgp.N)*(θhat-θbar) 
     W = inv(Σ) # scaled for numeric accuracy
     -0.5*dot(err, W, err)
 end
@@ -36,7 +36,7 @@ end
     insupport(dgp, θ) || return -Inf
     # Compute simulated moments
     θbar, _ = simmomentscov(tcn, dgp, S, θ, dtθ=dtθ, preprocess=preprocess)
-    err = sqrt(1000.0)*(θhat-θbar) 
+    err = sqrt(dgp.N)*(θhat-θbar) 
     -0.5*dot(err, Weight, err)
 end
 

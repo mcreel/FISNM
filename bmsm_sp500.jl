@@ -35,24 +35,36 @@ include("DGPs/JD.jl")
 
 include("NeuralNets/utils.jl")
 include("NeuralNets/tcn_utils.jl")
+include("NeuralNets/TCN.jl")
 
 include("BMSM.jl")
 include("samin.jl")
 
-# Outside of the main() function due to world age issues
-tcn = BSON.load("sobel-30-20.bson")[:best_model];
+# choose the model
+specs = (name = "30-20", max_ret = 30, max_rv = 20, max_bv = 20)
+BSON.@load "statistics/statistics_$(specs.name).bson" μs σs
 
-# Load statistics for standardization
-BSON.@load "statistics_30-20.bson" μs σs
+# build the net
+dgp = JD(1000)
+tcn = build_tcn(dgp, dilation=2, kernel_size=32, channels=32,
+    summary_size=10, dev=cpu, n_layers=7)
+
+# load the trained parameters of net
+BSON.@load "tcn_state_$(specs.name).bson" tcn_state
+Flux.loadmodel!(tcn, tcn_state)
+Flux.testmode!(tcn)
+
+# results in current draft, using ordinary random draws
+# tcn = BSON.load("models/JD/30-20.bson")[:best_model];
+# BSON.@load "statistics_30-20.bson" μs σs
 
 @views function preprocess(x) # For X only, don't discard extreme values
     x[:, :, 2:3, :] = log1p.(x[:, :, 2:3, :]) # Log RV and BV
      (x .- μs) ./ σs
 end
 
-# using infile=nothing to start
+# use infile=nothing to start
 function main(N,  outfile, infile)
-
 S = 50
 burnin = 100 # Burn-in steps
 covreps = 500 # Number of repetitions to estimate the proposal covariance
@@ -60,7 +72,8 @@ verbosity = 10 # MCMC verbosity
 
 @info "Loading data, preparing model..."
 # Read SP500 data and transform it to TCN-friendly format
-df = CSV.read("spy16-19.csv", DataFrame);
+#df = CSV.read("spy16-19.csv", DataFrame);
+df = CSV.read("spy.csv", DataFrame);
 display(describe(df))
 X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
     x -> reshape(x, size(x)..., 1) |>
@@ -69,7 +82,7 @@ X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
 
 @info "Loading DGP, making data transform..."
 # Define DGP of auxilary model and make transform
-dgp = JD(1000)
+
 transform_seed = 1024
 Random.seed!(transform_seed)
 pd = priordraw(dgp, 100_000)
@@ -95,7 +108,7 @@ if infile !== nothing
     # update the weight matrix and proposal covariance
     @info "Computing covariance of the proposal and the weight ..."
     _, Σp = simmomentscov(tcn, dgp, covreps, start, dtθ=dtθ, preprocess=preprocess)
-    Weight = inv(1000.0*(1+1/S)*Σp)
+    Weight = inv(dgp.N *(1+1/S)*Σp)
     # adjust proposal depending on acceptance rate
     ac = mean(chain[:,9])
     @info "acceptance rate of input chain: " ac
@@ -105,8 +118,8 @@ if infile !== nothing
 else  
     @info "Computing covariance of the proposal..."
     _, Σp = simmomentscov(tcn, dgp, 500, θtcn, dtθ=dtθ, preprocess=preprocess)
-    Weight = inv(1000.0*(1+1/S)*Σp)
-    δ = 1e0
+    Weight = inv(dgp.N *(1+1/S)*Σp)
+    δ = 5e-1
     @info "current δ: " δ
     lb, ub = θbounds(dgp)
     lb = Float64.(lb)
@@ -140,9 +153,7 @@ chain = mcmc(start, Lₙ=obj, proposal=prop, N=N, burnin=burnin, verbosity=verbo
 @info "acceptance rate: " mean(chain[:,9])
 # Save chain
 BSON.@save outfile chain Σp Weight δ
-
-
-# # Make MCMC chain and display
+# Make MCMC chain and display
 ch = Chains(chain)
 display(ch)
 display(plot(ch))

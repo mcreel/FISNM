@@ -1,13 +1,17 @@
 # Build TCN for a given DGP
-function build_tcn(d::DGP; dilation=2, kernel_size=8, channels=16, summary_size=10, dev=cpu)
+function build_tcn(d::DGP; 
+    dilation=2, kernel_size=8, channels=16, summary_size=10, dev=cpu, n_layers=0
+)
     # Compute TCN dimensions and necessary layers for full RFS
-    n_layers = ceil(Int, necessary_layers(dilation, kernel_size, d.N))
+    if n_layers == 0
+        n_layers = necessary_layers(dilation, kernel_size, d.N)
+    end
     dim_in, dim_out = nfeatures(d), nparams(d)
     dev(
         Chain(
             TCN(
                 vcat(dim_in, [channels for _ ∈ 1:n_layers], 1),
-                kernel_size=kernel_size, # TODO: BE CAREFUL! DILATION IS ACTUALLY NOT HANDLED!!!
+                kernel_size=kernel_size,
             ),
             Conv((1, summary_size), 1 => 1, stride=summary_size),
             Flux.flatten,
@@ -22,7 +26,7 @@ function train_cnn!(
     m, opt, dgp, dtY;
     epochs=1000, batchsize=32, passes_per_batch=10, dev=cpu, loss=rmse_conv,
     validation_loss=true, validation_frequency=10, validation_size=2_000, verbosity=1, 
-    transform=true
+    validation_seed=nothing, transform=true
 )
     Flux.trainmode!(m) # In case we have dropout / layer normalization
     θ = Flux.params(m) # Extract parameters
@@ -39,6 +43,7 @@ function train_cnn!(
 
     # Iterate over training epochs
     for epoch ∈ 1:epochs
+        isnothing(validation_seed) || Random.seed!(validation_seed)
         X, Y = generate(dgp, batchsize, dev=dev) # Generate a new batch
         transform && StatsBase.transform!(dtY, Y)
         # Transform features to format for CNN
@@ -82,68 +87,60 @@ end
 # Train a convolutional neural network using pre-generated BSONs
 function train_cnn_from_datapath!(
     m, opt, dgp, dtY;
-    datapath, statsfile, batchsize=32, passes_per_batch=1, dev=cpu, loss=rmse_conv,
-    validation_loss=true, validation_frequency=10, validation_size=2_000, verbosity=1, 
-    transform=true, epochs=1_000, use_logs=false
+    restrict_data, datapath, batchsize=32, passes_per_batch=1, dev=cpu, 
+    loss=rmse_conv,validation_loss=true, validation_frequency=10, 
+    validation_size=2_000, verbosity=1, transform=true, validation_seed=nothing
 )
     Flux.trainmode!(m) # In case we have dropout / layer normalization
     θ = Flux.params(m) # Extract parameters
     best_model = deepcopy(m) 
     best_loss = Inf
 
-    # files = readdir(datapath)
-    BSON.@load statsfile μs σs qminP qmaxP qRV qBV lnμs lnσs qlnBV qlnRV
-    function restrict_data(X, Y, use_logs=use_logs)
-        if use_logs
-            X = cat(X[:, :, 1:1, :], log.(X[:, :, 2:3, :]), dims=3)
-            μs = lnμs
-            σs = lnσs
-            qBV = qlnBV
-            qRV = qlnRV
-        end
-        # Indexes where prices exceed
-        csX = cumsum(X[:, :, 1, :], dims=2)
-        idxP = (sum(csX .< qminP, dims=[1,2]) + sum(csX .> qmaxP, dims=[1,2])) |> vec .== 0
-        X = X[:, :, :, idxP]
-        Y = Y[:, idxP]
-        # Indexes where RV exceeds
-        idxRV = sum(X[:, :, 2, :] .> qRV, dims=[1,2]) |> vec .==0
-        X = X[:, :, :, idxRV]
-        Y = Y[:, idxRV]
-        # Indexes where BV exceeds threshold
-        idxBV = sum(X[:, :, 3, :] .> qBV, dims=[1,2]) |> vec .== 0
-        (X[:, :, :, idxBV] .- μs) ./ σs, Y[:, idxBV]
-    end
-
+    files = shuffle(readdir(datapath))
+    epochs = length(files) * passes_per_batch
 
     # Create a validation set to compute and keep track of losses
     if validation_loss
+        isnothing(validation_seed) || Random.seed!(validation_seed)
         Xv, Yv = generate(dgp, validation_size, dev=cpu)
         # Want to see validation RMSE on original scale => no rescaling
         Xv = tabular2conv(Xv)
-        Xv, Yv = map(dev, restrict_data(Xv, Yv))
+        # if datapath == "data_clean"
+        #     # Cap data (and apply log to RV/BV)
+        #     Xv[:, :, 1, :] .= clamp.(Xv[:, :, 1, :], -100, 100)
+        #     Xv[:, :, 2:3, :] .= log.(clamp.(Xv[:, :, 2:3, :], 1f-4, 1f4))
+        # end
+        Xv, Yv = map(dev, restrict_data(Xv, Yv)) # TODO: change this
+        transform && StatsBase.transform!(dtY, Yv)
         losses = zeros(epochs)
+        @info "Validation set size: $(size(Yv, 2))"
     end
 
     # Compute pre-training loss
-    Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
-    pre_train_loss = loss(Ŷ, Yv)
+    Ŷ = m(Xv)
+    pre_train_loss = rmse_conv(Ŷ, Yv)
     @info "Pre training:" pre_train_loss
 
-    for epoch ∈ 1:epochs
-        # TODO: why is this needed?
-        GC.gc(true)
-        CUDA.reclaim()
-        # Load matching file (TODO: CHANGE THIS!!)
-        BSON.@load joinpath(datapath, "$epoch.bson") X Y
-        X, Y = restrict_data(X, Y)
-        # Pass to device
-        X, Y = map(dev, [X, Y])
-        # Standardize Ys
-        transform && StatsBase.transform!(dtY, Y)
+    # Read in before the passes to ensure we don't have issues with new data
+    files = shuffle(readdir(datapath))
 
-        # ----- Training ---------------------------------------------
-        for passes_per_batch ∈ 1:passes_per_batch
+    for pass ∈ 1:passes_per_batch
+        files = shuffle(files) # Reshuffle
+        for (epoch, file) ∈ enumerate(files)
+            epoch += (pass - 1) * length(files)
+            # TODO: why is this needed?
+            GC.gc(true)
+            CUDA.reclaim()
+            # Load matching file (TODO: CHANGE THIS!!)
+            BSON.@load joinpath(datapath, file) X Y
+            X, Y = restrict_data(X, Y)
+            # Pass to device
+            X, Y = map(dev, [X, Y]) # TODO: change this
+            # Standardize Ys
+            transform && StatsBase.transform!(dtY, Y)
+
+            # ----- Training ---------------------------------------------
+            
             dl = Flux.DataLoader((X, Y), batchsize=min(batchsize, size(Y, 2)),
                 shuffle=true)
             # Compute loss and gradients
@@ -154,23 +151,24 @@ function train_cnn_from_datapath!(
                 # Take gradient descent step
                 Flux.update!(opt, θ, ∇)
             end
-        end
 
-        # Compute validation loss and print status if verbose
-        # Do this for the last 100 epochs, too, in case frequency is low
-        if validation_loss && (epoch % validation_frequency == 0)
-            Flux.testmode!(m)
-            Ŷ = transform ? StatsBase.reconstruct(dtY, m(Xv)) : m(Xv)
-            current_loss = loss(Ŷ, Yv)
-            if current_loss < best_loss
-                best_loss = current_loss
-                best_model = deepcopy(cpu(m))
+            # Compute validation loss and print status if verbose
+            # Do this for the last 100 epochs, too, in case frequency is low
+            if validation_loss && ((epoch % validation_frequency == 0) || (pass == passes_per_batch && epoch > epochs - 1000))
+                Flux.testmode!(m)
+                Ŷ = m(Xv)
+                current_loss = loss(Ŷ, Yv)
+                if current_loss < best_loss
+                    best_loss = current_loss
+                    best_model = deepcopy(cpu(m))
+                end
+                current_loss = rmse_conv(Ŷ, Yv) # Do this to ensure comparison even when training with Huber loss
+                losses[epoch] = current_loss
+                Flux.trainmode!(m)
+                epoch % verbosity == 0 && @info "$epoch / $epochs" best_loss current_loss
+            else
+                epoch % verbosity == 0 && @info "$epoch / $epochs"
             end
-            losses[epoch] = current_loss
-            Flux.trainmode!(m)
-            epoch % verbosity == 0 && @info "$epoch / $epochs" best_loss current_loss
-        else
-            epoch % verbosity == 0 && @info "$epoch / $epochs"
         end
     end
     # Return losses if tracked
