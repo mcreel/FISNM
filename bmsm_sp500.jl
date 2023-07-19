@@ -40,6 +40,11 @@ include("NeuralNets/TCN.jl")
 include("BMSM.jl")
 include("samin.jl")
 
+# choose the data file
+#datafile = "spy.csv"
+datafile = "spy16-19.csv"
+
+
 # choose the model
 specs = (name = "30-20", max_ret = 30, max_rv = 20, max_bv = 20)
 BSON.@load "statistics/statistics_$(specs.name).bson" μs σs
@@ -70,10 +75,9 @@ burnin = 100 # Burn-in steps
 covreps = 500 # Number of repetitions to estimate the proposal covariance
 verbosity = 10 # MCMC verbosity
 
-@info "Loading data, preparing model..."
+@info "Loading data file $datafile, preparing model..."
 # Read SP500 data and transform it to TCN-friendly format
-#df = CSV.read("spy16-19.csv", DataFrame);
-df = CSV.read("spy.csv", DataFrame);
+df = CSV.read(datafile, DataFrame);
 display(describe(df))
 X₀ = Float32.(Matrix(df[:, [:rets, :rv, :bv]])) |>
     x -> reshape(x, size(x)..., 1) |>

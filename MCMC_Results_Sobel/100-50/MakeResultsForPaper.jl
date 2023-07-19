@@ -3,33 +3,27 @@
 ##
 cd(@__DIR__)
 using Pkg
-Pkg.activate("../")
+Pkg.activate("../../")
 using BSON: @load
 using Statistics, MCMCChains, StatsPlots, DataFrames, Term, KernelDensity
 
 function main()
-
-## READ IN 30-20 CUE
-@info "reading chains for 30-20-CUE, Sobel, Sample 1"
-files = ("30-20-sample1-sobel-chain1.bson", "30-20-sample1-sobel-chain2.bson")
+#100-50
+# for sample1, we have 2 chains, each of 20000
+@info "reading chains for 100-50-CUE, Sobel, Sample 1"
+files = ("100-50-sample1-sobel-chain1.bson", "100-50-sample1-sobel-chain2.bson")
 chain1 = nothing
 for f in files
-    @load f chain Σp
+    @load f chain
     chain1 == nothing ? chain1 = chain : chain1 = [chain1; chain]
     println("rows: ", size(chain1,1))
 end
-println("30-20-sample1-Sobel loaded, acceptance rate: ", mean(chain1[:,end-1]), " length: ", size(chain1,1))
+println("100-50-sample1-Sobel loaded, acceptance rate: ", mean(chain1[:,end-1]), " length: ", size(chain1,1))
 
-@info "reading chains for 30-20-CUE, Sobel, Sample 2"
-files = ("30-20-sample2-sobel-chain1.bson", "30-20-sample2-sobel-chain2.bson")
-chain2 = nothing
-for f in files
-    @load f chain Σp
-    chain2 == nothing ? chain2 = chain : chain2 = [chain2; chain]
-    println("rows: ", size(chain2,1))
-end
-println("30-20-sample2-Sobel loaded, acceptance rate: ", mean(chain2[:,end-1]), " length: ", size(chain2,1))
-
+# for sample2, only one chain
+@load "100-50-sample2-sobel-chain1.bson" chain
+chain2 = chain
+println("100-50-sample2-Sobel loaded, acceptance rate: ", mean(chain2[:,end-1]), " length: ", size(chain2,1))
 
 ## make jump size zero when there are no jumps
 chain1[:,7] = chain1[:,7] .* (chain1[:,6] .> 0.0)
