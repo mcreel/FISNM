@@ -11,13 +11,13 @@ end
 @views function MSMmoments(data)
     data[:,2:3] .= log.(data[:,2:3])
     # covariances between variables (there are 3)
-    c = offdiag2(cov(data))
+    c = offdiag2(cor(data))
     # moments: 3 means, 3 std. dev., 6 autocovs, 3 covs = 15 moments
     m = vcat(
         mean(data,dims=1)[:],
         std(data, dims=1)[:],
-        mean(data[2:end,:].*data[1:end-1,:], dims=1)[:], # 1st order autocovs
-        mean(data[3:end,:].*data[1:end-2,:], dims=1)[:], # 2nd order autocovs
+        mean(data[2:end,2:3].*data[1:end-1,2:3], dims=1)[:], # 1st order autocovs
+        mean(data[3:end,2:3].*data[1:end-2,2:3], dims=1)[:], # 2nd order autocovs
         c[:]
        )
     return m
@@ -26,7 +26,7 @@ end
 
 @views function simmomentscov(θ, S)
     # Computes moments according to the TCN for a given DGP, θ, and S
-    ms = zeros(S, 15)
+    ms = zeros(S, 13)
     Random.seed!(1234) # keep the seed the same across different θs
     for s = 1:S
         data = simulate_jd(θ)

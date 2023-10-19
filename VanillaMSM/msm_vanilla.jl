@@ -32,12 +32,12 @@ include("samin.jl")
 
 # use infile=nothing to start
 function main()
-S = 25 # number of simulations of moments at each trial parameter
+S = 50 # number of simulations of moments at each trial parameter
 
 # load the pre-generated data sets (true params are TCN13-17 mean)
 BSON.@load "ComparisonDataSets-TCN-13-17.bson" datasets
 reps = size(datasets,1)
-θhats = Vector{Array{Float64,2}}() # holder for the chains
+θhats = Vector{Vector{Float64}}() # holder for the chains
 
 # true parameters, use as start values for chains
 θtcn = [  # TCN results for 13-17 data
@@ -61,8 +61,7 @@ for rep = 1:reps
     mhat = MSMmoments(data)
     Random.seed!(rand(1:Int64(1e10)))
     obj = θ -> -bmsmobjective(θ, mhat, S)
-
-    sa_results = samin(obj, start, lb, ub, rt = 0.5, nt=1, ns=10, verbosity=3, coverage_ok=1)
+    sa_results = samin(obj, start, lb, ub, rt=0.25, nt=3, ns=3, verbosity=3, coverage_ok=1)
     θhat = sa_results[1]
     @info "rep: " rep
     @info "θhat: " θhat
