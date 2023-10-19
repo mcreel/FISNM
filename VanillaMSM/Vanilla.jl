@@ -23,13 +23,16 @@ end
     return m
 end    
 
+
 @views function simmomentscov(θ, S)
     # Computes moments according to the TCN for a given DGP, θ, and S
     ms = zeros(S, 15)
-    Threads.@threads for s = 1:S
+    Random.seed!(1234) # keep the seed the same across different θs
+    for s = 1:S
         data = simulate_jd(θ)
         ms[s,:] = MSMmoments(data)
     end
+    Random.seed!(Int64(round((time()/1e6)))) # back to random
     return vec(mean(ms, dims=1)), Symmetric(cov(ms))
 end
 
