@@ -8,7 +8,7 @@ using Random
 using StatsBase
 
 include("JD.jl")
-reps = 2 # number of simulated data files to estimate
+reps = 100 # number of simulated data files to estimate
 
 # simulate data using given parameters
 θtcn = [  # TCN results for 13-17 data
