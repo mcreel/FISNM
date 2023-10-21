@@ -27,7 +27,7 @@ using MCMCChains
 using StatsPlots
 
 include("JD.jl")
-include("Vanilla.jl")
+include("VanillaMoments.jl")
 include("samin.jl")
 
 # use infile=nothing to start

@@ -33,7 +33,7 @@ include("JD.jl")
 include("../NeuralNets/utils.jl")
 include("../NeuralNets/tcn_utils.jl")
 include("../NeuralNets/TCN.jl")
-
+include("TCNMoments.jl")  # defines the moments and MSM objective
 include("samin.jl")
 
 #---------- TCN stuff-------------
@@ -85,30 +85,23 @@ start = θtrue
 
 # loop over data sets
 for rep = 1:reps
-    data = datasets[rep]
-    data = Float32.(data) |>
+    # Compute data moments
+    data = datasets[rep]   # get the data
+    data = Float32.(data) |>   # transform to TCN style
     x -> reshape(x, size(x)..., 1) |>
     x -> permutedims(x, (2, 3, 1)) |> 
     tabular2conv |> preprocess
-
-
-    # Compute data moments
-    θtcn = Float64.((tcn(data) |> m -> mean(StatsBase.reconstruct(dtθ, m), dims=2) |> vec))
+    θtcn = Float64.((tcn(data) |> m -> mean(StatsBase.reconstruct(dtθ, m), dims=2) |> vec))  # get the tcn fit
     θtcn = min.(θtcn,ub)
     θtcn = max.(θtcn,lb)
-    display(θtcn)
-
-#=
-    # make the data moments
-    mhat = MSMmoments(data)
-    Random.seed!(rand(1:Int64(1e10)))
-    obj = θ -> -bmsmobjective(θ, mhat, S)
+    # do SA to get MSM estimate
+    obj = θ -> -bmsmobjective(θtcn,  θ; tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess) 
     sa_results = samin(obj, start, lb, ub, rt=0.25, nt=3, ns=3, verbosity=3, coverage_ok=1)
     θhat = sa_results[1]
     @info "rep: " rep
     @info "θhat: " θhat
     push!(θhats, θhat)
-=#
+
 end
 return θhats
 end
