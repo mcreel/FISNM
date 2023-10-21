@@ -61,7 +61,7 @@ for rep = 1:reps
     mhat = MSMmoments(data)
     Random.seed!(rand(1:Int64(1e10)))
     obj = θ -> -bmsmobjective(θ, mhat, S)
-    sa_results = samin(obj, start, lb, ub, rt=0.25, nt=3, ns=3, verbosity=3, coverage_ok=1)
+    sa_results = samin(obj, start, lb, ub, rt=0.25, nt=3, ns=3, verbosity=1, coverage_ok=1)
     θhat = sa_results[1]
     @info "rep: " rep
     @info "θhat: " θhat

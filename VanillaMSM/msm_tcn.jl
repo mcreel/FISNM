@@ -96,7 +96,7 @@ for rep = 1:reps
     θtcn = max.(θtcn,lb)
     # do SA to get MSM estimate
     obj = θ -> -bmsmobjective(θtcn,  θ; tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess) 
-    sa_results = samin(obj, start, lb, ub, rt=0.25, nt=3, ns=3, verbosity=3, coverage_ok=1)
+    sa_results = samin(obj, start, lb, ub, rt=0.25, nt=3, ns=3, verbosity=1, coverage_ok=1)
     θhat = sa_results[1]
     @info "rep: " rep
     @info "θhat: " θhat
