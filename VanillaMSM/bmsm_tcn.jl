@@ -29,12 +29,10 @@ using StatsPlots
 
 include("../DGPs/DGPs.jl")
 include("../DGPs/JD.jl")
-include("JD.jl")
+include("../BMSM.jl")
 include("../NeuralNets/utils.jl")
 include("../NeuralNets/tcn_utils.jl")
 include("../NeuralNets/TCN.jl")
-include("TCNMoments.jl")  # defines the moments and MSM objective
-include("samin.jl")
 
 #---------- TCN stuff-------------
 specs = (name = "30-20", max_ret = 30, max_rv = 20, max_bv = 20)
@@ -59,13 +57,17 @@ pd[8, :] .= max.(pd[8, :], 0)
 dtθ = fit(ZScoreTransform, pd)
 #---------- done with TCN stuff-------------
 
-function main()
+@views function main()
+# set configuration    
 S = 50 # number of simulations of moments at each trial parameter
+chainlength = 200
+burnin = 10
+verbosity = 50
 
 # load the pre-generated data sets (true params are TCN13-17 mean)
 BSON.@load "ComparisonDataSets-TCN-13-17.bson" datasets
 reps = size(datasets,1)
-θhats = Vector{Vector{Float64}}() # holder for the chains
+results = zeros(10,reps)
 
 # true parameters, use as start values for chains
 θtrue = [  # TCN results for 13-17 data
@@ -77,33 +79,48 @@ reps = size(datasets,1)
 0.00563,
 3.25268,
 0.03038]
+lb, ub = θbounds(dgp)
 
-
-# initialize things for minimization
-lb, ub = PriorSupport()
-start = θtrue
+# define the proposal: MVN random walk (same for all runs)
+# _, Σp = simmomentscov(tcn, dgp, 1000, θtrue, dtθ=dtθ, preprocess=preprocess)
+#BSON.@save "Σp.bson" Σp
+BSON.@load "Σp.bson" Σp
+δ = 0.35
+@inbounds function proposal(current, δ, Σ)
+    p = rand(MvNormal(current, δ*Σ))
+    p[6] = max(p[6],0)
+    p[8] = max(p[8],0)
+    p
+end
+prop = θ -> proposal(θ, δ, Σp)
 
 # loop over data sets
-for rep = 1:reps
+Threads.@threads for rep = 1:reps
     # Compute data moments
     data = datasets[rep]   # get the data
     data = Float32.(data) |>   # transform to TCN style
     x -> reshape(x, size(x)..., 1) |>
     x -> permutedims(x, (2, 3, 1)) |> 
     tabular2conv |> preprocess
+
+    # moments for the sample
     θtcn = Float64.((tcn(data) |> m -> mean(StatsBase.reconstruct(dtθ, m), dims=2) |> vec))  # get the tcn fit
     θtcn = min.(θtcn,ub)
     θtcn = max.(θtcn,lb)
-    # do SA to get MSM estimate
-    obj = θ -> -bmsmobjective(θtcn,  θ; tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess) 
-    sa_results = samin(obj, start, lb, ub, rt=0.25, nt=3, ns=3, verbosity=1, coverage_ok=1)
-    θhat = sa_results[1]
-    @info "rep: " rep
-    @info "θhat: " θhat
-    push!(θhats, θhat)
 
+    # likelihood
+    obj = θ -> bmsmobjective(θtcn, θ, tcn=tcn, S=S, dtθ=dtθ, dgp=dgp, preprocess=preprocess)
+    # get the chain, starting at true, but with burnin
+    chain = mcmc(θtrue, Lₙ=obj, proposal=prop, N=chainlength, burnin=burnin, verbosity=verbosity)
+    @info "rep: " rep
+    @info "acceptance rate: " mean(chain[:,9])
+    θhat = mean(chain[:,1:8], dims=1)
+    @info "θhat: " θhat
+    results[:,rep] = mean(chain, dims=1)[:]
+    rmse = sqrt.(mean((results[1:8,1:rep] .- θtrue).^2, dims=2))
+    @info "rmse: " rmse 
 end
-return θhats
+return results
 end
-θhats = main()
-BSON.@save "TCNθhats.bson" θhats
+results = main()
+BSON.@save "TCNresults.bson" results
