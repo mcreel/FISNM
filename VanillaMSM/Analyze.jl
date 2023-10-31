@@ -18,6 +18,7 @@ logℒ  = results[10,:]
 @info "logℒ " mean(logℒ ) minimum(logℒ ) maximum(logℒ )
 bias_tcn = mean(results[1:8,:] .-θtrue, dims=2)
 rmse_tcn = sqrt.(mean((results[1:8,:] .- θtrue).^2, dims=2))
+@info "mean rmse TCN" mean(rmse_tcn)
 
 BSON.@load "VanillaResults.bson" results
 @info "results for Vanilla moments"
@@ -27,6 +28,7 @@ logℒ  = results[10,:]
 @info "logℒ " mean(logℒ ) minimum(logℒ ) maximum(logℒ )
 bias_vanilla = mean(results[1:8,:] .-θtrue, dims=2)
 rmse_vanilla = sqrt.(mean((results[1:8,:] .- θtrue).^2, dims=2))
+@info "mean rmse vanilla" mean(rmse_vanilla)
 params = ["μ", "κ", "α", "σ", "ρ", "λ₀", "λ₁", "τ" ]  
 
 formatter = (v, i, j) -> (j>1) ? ft_printf("%5.3f")  : v
