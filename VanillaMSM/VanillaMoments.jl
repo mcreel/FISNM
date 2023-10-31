@@ -41,7 +41,7 @@ using StatsBase
     m = vcat(
         mean(data,dims=1)[:],
         std(data, dims=1)[:],
-	autocor(data, [1])[:],
+	    autocor(data, [1])[:],
         c[:]
        )
     return m
